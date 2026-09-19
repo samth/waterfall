@@ -36,8 +36,9 @@ elab "check_leaf_schedule" : tactic => withMainContext do
   outer.restore true
   if closed || assigned then throwError "failed search retained a proof of False"
   let first := (#[0, 1, 2, 3, 4] : Array Nat).map (1, ·)
-  let second := (#[0, 1, 3, 2, 4] : Array Nat).map (2, ·)
-  unless observed == first ++ second ++ #[(3, 0), (3, 1)] do
+  -- The next diagonal starts with depth one at the same strength. It sees the
+  -- same free closers before structural moves become available.
+  unless observed == first ++ first do
     throwError "unexpected leaf schedule or changed selectors: {repr observed}"
 
 example : True := by

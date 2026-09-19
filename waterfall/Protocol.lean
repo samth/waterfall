@@ -69,7 +69,7 @@ public inductive Group where
   deriving BEq, Repr, Inhabited, ToJson, FromJson
 
 public def structuralGroups : Array Group :=
-  #[.basic, .hypotheses, .rules, .library, .forward, .functions, .induction]
+  #[.basic, .hypotheses, .rules, .library, .functions, .induction, .forward]
 
 public inductive InductionKind where
   | none | data | evidence | functional
@@ -205,8 +205,9 @@ public structure SearchPolicy where
 public def SearchPolicy.default : SearchPolicy := ⟨Unit, (), fun space => space.expand 0 #[] (fun _ => true)⟩
 
 /-- A root-only prefix followed by diagonals, without revisiting prefix pairs.
-A prefix of one is ordinary diagonal deepening. Three reproduces the installed
-schedule. This helper is convenient, but policies may use any fair enumerator. -/
+A prefix of one is ordinary diagonal deepening and is the installed schedule.
+Larger prefixes front-load stronger root trials. This helper is convenient, but
+policies may use any fair enumerator. -/
 public def diagonalTrials (rootPrefix round : Nat) : Array (Nat × Nat) :=
   if round == 0 then (List.range (max 1 rootPrefix)).toArray.map (fun i => (0, i + 1))
   else (List.range (round + 1)).toArray.filterMap fun tier =>
@@ -220,7 +221,7 @@ public structure Hooks where
   policy : SearchPolicy := .default
   /-- Finite batches of trials. For eventual reachability, visit every finite
   depth and positive strength; effort truncates this one sequence globally. -/
-  trials : Nat → Array (Nat × Nat) := diagonalTrials 3
+  trials : Nat → Array (Nat × Nat) := diagonalTrials 1
   /-- Effective admission and path cost. The default charges library moves four
   and constructor closers one; the five ordinary closers remain free.
   Finite fixed costs retain eventual availability. Structural generators may
