@@ -304,10 +304,13 @@ private def instantiateHypotheses (g : MVarId) (strength : Nat) : TacticM (Array
       unless ← withoutModifyingState (isDefEq (← inferType t) domain) do continue
       for wrapper in wrappers do
         for depth in [:if wrapper.isSome then strength + 1 else 1] do
-          out := out.push { cost := 1, label := "forward hypothesis", run := g.withContext do
-            let mut arg := t
-            if let some c := wrapper then
-              for _ in [:depth + 1] do arg ← mkAppM c #[arg]
+          let mut arg := t
+          if let some c := wrapper then
+            for _ in [:depth + 1] do arg ← mkAppM c #[arg]
+          out := out.push {
+            cost := 1, label := "forward hypothesis",
+            major := some d.fvarId, subject := some arg,
+            run := g.withContext do
             -- Apply one binder at a time; any remaining binders stay quantified
             -- in the new fact and may be instantiated by a later search step.
             let proof := mkApp (mkFVar d.fvarId) arg
@@ -415,12 +418,12 @@ private def inductOrAnalyzeData (g : MVarId) : TacticM (Array Move) := do
           return (← child.introNP reverted.size).2
         setGoals children
       if !others.isEmpty then
-        out := out.push { cost := 1, induction := kind, major := some d.fvarId, label := s!"induction {d.userName} generalized", run := inductWithMotive {generalize := others} }
+        out := out.push { cost := 1, induction := kind, major := some d.fvarId, label := s!"induction {d.userName} generalized", run := inductWithMotive {generalize := others}, motive := InductionMotive.localGeneralization }
       out := out.push { cost := 1, induction := kind, major := some d.fvarId, label := s!"induction {d.userName}", run := inductWithMotive {} }
       if ty.getAppArgs[info.numParams:].any (fun index => !index.isFVar) then
-        out := out.push { cost := 1, induction := kind, major := some d.fvarId, label := s!"induction {d.userName} abstract indices", run := inductWithMotive {abstractIndices := true} }
+        out := out.push { cost := 1, induction := kind, major := some d.fvarId, label := s!"induction {d.userName} abstract indices", run := inductWithMotive {abstractIndices := true}, motive := InductionMotive.indexAbstraction }
         if !others.isEmpty then
-          out := out.push { cost := 1, induction := kind, major := some d.fvarId, label := s!"induction {d.userName} generalized abstract indices", run := inductWithMotive {generalize := others, abstractIndices := true} }
+          out := out.push { cost := 1, induction := kind, major := some d.fvarId, label := s!"induction {d.userName} generalized abstract indices", run := inductWithMotive {generalize := others, abstractIndices := true}, motive := InductionMotive.localGeneralizationAndIndexAbstraction }
     -- Noninductive case analysis is another alternative, useful for tests and
     -- discriminants where induction would introduce irrelevant hypotheses.
     if !(← isProp d.type) then
@@ -578,9 +581,10 @@ public def expand (cfg : Config) (stats : IO.Ref Stats) (hooks : Hooks)
           let next := children.map fun g => { job with
             goal := g, remaining := job.remaining - cost, ancestors := candidate :: job.ancestors }
           let selected : Selection := {
-            replayable := m.replayable, action, induction := m.induction, label := m.label, role := m.role,
+            replayable := m.replayable, action, induction := m.induction,
+            label := m.label, role := m.role,
             strength, remaining := job.remaining, cost, children := children.length,
-            agenda := node.jobs.map (·.goal), focus }
+            agenda := node.jobs.map (·.goal), focus, motive := m.motive }
           let successor : Node σ := { node with
             saved := ← Tactic.saveState,
             jobs := next ++ node.jobs.eraseIdx focus, plan := (selected, saved) :: node.plan }

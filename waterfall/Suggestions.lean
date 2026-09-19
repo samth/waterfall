@@ -79,8 +79,8 @@ private def inductionCommand (step : Selection) (major : FVarId) :
   let declaredType ← inferType (mkFVar major)
   let majorType ← whnf declaredType
   let mut commands := #[]
-  let generalized := step.label.endsWith " generalized" ||
-    step.label.endsWith " generalized abstract indices"
+  let generalized := step.motive == InductionMotive.localGeneralization ||
+    step.motive == InductionMotive.localGeneralizationAndIndexAbstraction
   if generalized then
     let mut others : Array (TSyntax `ident) := #[]
     for d in (← getLCtx) do
@@ -88,7 +88,8 @@ private def inductionCommand (step : Selection) (major : FVarId) :
           (← isProp d.type) || (← isType (mkFVar d.fvarId)) || declaredType.containsFVar d.fvarId do
         others := others.push (mkIdent d.userName)
     unless others.isEmpty do commands := commands.push (← `(tactic| revert $others*))
-  if step.label.endsWith "abstract indices" then
+  if step.motive == InductionMotive.indexAbstraction ||
+      step.motive == InductionMotive.localGeneralizationAndIndexAbstraction then
     let .const name _ := majorType.getAppFn | throwError "missing indexed relation"
     let info ← getConstInfoInduct name
     let mut indices : Array Expr := #[]

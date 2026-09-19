@@ -75,6 +75,13 @@ public inductive InductionKind where
   | none | data | evidence | functional
   deriving BEq, Repr, Inhabited, ToJson, FromJson
 
+/-- The shape of the motive prepared for an induction candidate. This is policy
+metadata: schedulers should not have to recover semantic choices from labels. -/
+public inductive InductionMotive where
+  | direct | localGeneralization | indexAbstraction
+  | localGeneralizationAndIndexAbstraction
+  deriving BEq, Repr, Inhabited, ToJson, FromJson
+
 /-- Deferred inference plus typed policy metadata. Only the engine owns rollback
 and acceptance of its complete continuation. Noninduction is the default. -/
 public structure Move where
@@ -90,6 +97,7 @@ public structure Move where
   /-- False when replay needs state or proof inputs absent from the ordinary plan. -/
   replayable : Bool := true
   induction : InductionKind := .none
+  motive : InductionMotive := .direct
   /-- Semantic metadata for scheduling, independent of display labels. -/
   major : Option FVarId := none
   /-- Optional subject for inspecting or explaining an operation. Like `major`,
@@ -144,6 +152,7 @@ public structure Selection where
   replayable : Bool
   action : ActionId
   induction : InductionKind
+  motive : InductionMotive := .direct
   label : String
   role : Name := .anonymous
   strength : Nat

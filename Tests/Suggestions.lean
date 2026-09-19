@@ -125,7 +125,8 @@ elab "indexed_hint" : tactic => do
     trials := fun _ => #[(2, 1)]
     policy := ⟨Unit, (), fun space =>
       if space.current.plan.isEmpty then
-        space.expand 0 #[#[.induction]] (fun c => c.move.label.endsWith "abstract indices")
+        space.expand 0 #[#[.induction]]
+          (fun c => c.move.motive == .indexAbstraction)
       else space.expand 0 #[] (fun _ => true)⟩ }
   discard <| waterfall.Suggestions.run (← getRef) #[] hooks (fun h => waterfall.run {} #[] h)
 
@@ -153,7 +154,9 @@ elab "forward_hint" : tactic => do
   let hooks : waterfall.Hooks := {
     trials := fun _ => #[(2, 1)]
     policy := ⟨Unit, (), fun space =>
-      if space.current.plan.isEmpty then space.expand 0 #[#[.forward]] (fun _ => true)
+      if space.current.plan.isEmpty then
+        space.expand 0 #[#[.forward]]
+          (fun c => c.move.major.isSome && c.move.subject.isSome)
       else space.expand 0 #[] (fun _ => true)⟩ }
   discard <| waterfall.Suggestions.run (← getRef) #[] hooks (fun h => waterfall.run {} #[] h)
 

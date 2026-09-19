@@ -17,7 +17,8 @@ open Lean Elab Command
 run_cmd do
   for name in [
       `waterfall.Config, `waterfall.Stats, `waterfall.Group,
-      `waterfall.structuralGroups, `waterfall.InductionKind, `waterfall.Move,
+      `waterfall.structuralGroups, `waterfall.InductionKind,
+      `waterfall.InductionMotive, `waterfall.Move,
       `waterfall.Move.applicable, `waterfall.ActionId, `waterfall.Candidate,
       `waterfall.Phase, `waterfall.Span, `waterfall.Outcome,
       `waterfall.Selection, `waterfall.Choices, `waterfall.Job,
