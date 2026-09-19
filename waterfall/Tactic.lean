@@ -24,7 +24,7 @@ public inductive Mode where
 
 /-- The standard callbacks for a mode, available for programmatic adaptation. -/
 public def Mode.hooks : Mode → Hooks
-  | .search => {}
+  | .search => { order := directMotiveFirst }
   | .committed => Committed.hooks
 
 /-- User-facing tactic options. The inherited `Config` fields control resources

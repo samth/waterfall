@@ -25,6 +25,7 @@ run_cmd do
       `waterfall.Node, `waterfall.Space, `waterfall.SearchPolicy,
       `waterfall.SearchPolicy.default, `waterfall.diagonalTrials,
       `waterfall.Hooks, `waterfall.Hooks.bool, `waterfall.Hooks.array,
+      `waterfall.directMotiveFirst,
       `waterfall.Canonical.snapshot,
       `waterfall.Choices.first, `waterfall.Choices.filter,
       `waterfall.Choices.map, `waterfall.Choices.append,

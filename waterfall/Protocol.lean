@@ -259,4 +259,19 @@ public def Hooks.array (hooks : Hooks) (span : Span) (body : TacticM (Array α))
     TacticM (Array α) :=
   hooks.around span (fun values => { count := some values.size }) body
 
+/-- Prefer the direct motive immediately before the corresponding generalized
+motive. The transformation is local and stable: cases, majors, and all other
+candidate families retain their generator order. -/
+public def directMotiveFirst (_ : MVarId) (_ : Span) (candidates : Array Candidate) :
+    TacticM (Option (Array ActionId)) := do
+  let mut order := candidates.map (·.action)
+  for i in [:candidates.size - 1] do
+    if let (some left, some right) := (candidates[i]?, candidates[i + 1]?) then
+      if left.move.induction != InductionKind.none && right.move.induction != InductionKind.none &&
+          left.move.major == right.move.major &&
+          left.move.motive == InductionMotive.localGeneralization &&
+          right.move.motive == InductionMotive.direct then
+        order := order.swapIfInBounds i (i + 1)
+  return some order
+
 end waterfall
