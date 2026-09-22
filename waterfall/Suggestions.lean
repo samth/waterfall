@@ -193,8 +193,15 @@ private def distinctRules (rules : Array (TSyntax `term)) : TacticM (Array (TSyn
   let mut out := #[]
   for rule in rules do
     let value ← withoutModifyingState <| Term.elabTerm rule none
-    if seen.contains value then continue
-    seen := seen.push value
+    -- A bare polymorphic identifier gets fresh implicit arguments/levels on
+    -- elaboration. Its declaration, not those temporary holes, identifies it.
+    let key := if rule.raw.isIdent then
+      match value.consumeMData.getAppFn with
+      | .const name _ => mkConst name
+      | head => head
+      else value
+    if seen.contains key then continue
+    seen := seen.push key
     out := out.push rule
   return out
 
@@ -307,12 +314,13 @@ private partial def renderTree (tree : ProofTree) (rules : Array (TSyntax `term)
   let .step step saved children := tree
   let roots ← getUnsolvedGoals
   let mut recipes ← inRecordedContext step saved winning fun forward => do
-    let mut simple ← if compact then conciseRecipes step rules else pure #[]
+    let simple ← if compact then conciseRecipes step rules else pure #[]
     let original ← command step rules hooks forward
-    if compact then
-      if let `(tactic| set_option tactic.customEliminators false in cases $major:term) := original then
-        simple := simple.push (← `(tactic| cases $major:term))
-    return simple.push original
+    let ordinaryCases ← match original with
+      | `(tactic| set_option tactic.customEliminators false in cases $major:term) =>
+        if compact then pure #[← `(tactic| cases $major:term)] else pure #[]
+      | _ => pure #[]
+    return simple ++ ordinaryCases ++ #[original]
   if step.preparation == .oneBinder || step.preparation == .allBinders then
     recipes := #[← namedIntros (step.preparation == .allBinders)]
   let checkpoint ← Tactic.saveState

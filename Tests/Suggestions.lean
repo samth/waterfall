@@ -262,3 +262,13 @@ elab "required_recipe_hint" : tactic => do
 
 example (a b : Nat) : a + b = b + a := by
   check_hint "Nat.add_comm" => required_recipe_hint
+
+
+-- A supplied polymorphic identifier and its discovered qualified name can
+-- elaborate with different fresh implicit arguments but are still one rule.
+def polyAppend {α : Type} : List α → List α → List α
+  | [], ys => ys
+  | x :: xs, ys => x :: polyAppend xs ys
+
+example {α : Type} (xs : List α) : polyAppend xs [] = xs := by
+  check_hint "[polyAppend]" => waterfall? [polyAppend]
