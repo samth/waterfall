@@ -178,7 +178,11 @@ additional premise-only and conditional-composition variants.
 main's `Scheduling.preparations` middleware still orders contextual preparations.
 Each trial receives at most one quarter of its starting remaining effort and a
 bounded share of remaining heartbeats. `PreludeTrial.tag` is an opaque policy selector,
-carried by `Node.trialTag`; it has no interpretation in the engine.
+carried by `Node.trialTag`; it has no interpretation in the engine. The combined
+recursion portfolio requests at most one eighth of effort for its two early
+orders, one tenth for its ordinary prefix, and one quarter for deeper repairs.
+Thus at least half remains for the fair schedule, independently of the generic
+engine's per-trial cap.
 
 The default hypothesis provider is `Critics.blockedPremise`: case-split the sole unknown
 premise of an otherwise applicable local rule. The optional

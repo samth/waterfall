@@ -127,11 +127,13 @@ public def hooks (inner : Hooks := {})
   -- In a branching search, the depth supported by a node budget grows
   -- logarithmically. This budget-derived contour bounds attractive wrong
   -- branches without reinstating a feature-specific magic depth. Both finite
-  -- contours use the engine's per-trial remaining-effort and heartbeat caps.
+  -- contours share one eighth of the effort. Together with the ordinary prefix
+  -- (one tenth) and deeper continuations (one quarter), this leaves at least
+  -- half for fair search. The engine additionally applies main's per-trial caps.
   prelude := fun cfg goals => do
     let scheduled := if ← activate goals then
-      #[{ depth := depthForEffort cfg.effort, attempts := cfg.effort },
-        { tag := `constructorExposure, depth := depthForEffort cfg.effort, attempts := cfg.effort }] else #[]
+      #[{ depth := depthForEffort cfg.effort, attempts := cfg.effort / 16 },
+        { tag := `constructorExposure, depth := depthForEffort cfg.effort, attempts := cfg.effort / 16 }] else #[]
     return scheduled ++ (← inner.prelude cfg goals)
 }
 
