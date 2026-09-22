@@ -5,6 +5,7 @@ import waterfall.Choices
 import waterfall.Committed
 import waterfall.Core
 import waterfall.Critics
+import waterfall.ArithmeticWitness
 import waterfall.InductionPlan
 import waterfall.Observe
 import waterfall.Operations
@@ -45,6 +46,7 @@ run_cmd do
       `waterfall.Critic, `waterfall.Critic.propose, `waterfall.Critic.hooks,
       `waterfall.Critics.propose, `waterfall.Critics.blockedPremise, `waterfall.Critics.blockedPremises,
       `waterfall.Critics.quantifiedRewrite,
+      `waterfall.Critics.arithmeticWitness,
       `waterfall.Critics.hooks,
       `waterfall.InductionPlan.Plan, `waterfall.InductionPlan.equivalent,
       `waterfall.InductionPlan.deduplicate, `waterfall.InductionPlan.quality,

@@ -14,6 +14,7 @@ small interfaces.
 | `waterfall.Execution` | Metered move execution and final root validation |
 | `waterfall.Repair` | Typed obstruction analysis and deferred repair proposals |
 | `waterfall.Critics` | Blocked-premise splitting and quantified-equality specialization |
+| `waterfall.ArithmeticWitness` | Optional arithmetic witness synthesis through `Critic` |
 | `waterfall.Scheduling` | Bounded preparation lookahead and staged search |
 | `waterfall.Choices` | Generic lazy selection, filtering, collection and commitment |
 | `waterfall.Parallel` | Isolated concurrent trials, shared work accounting and cancellation |
@@ -115,6 +116,31 @@ subexpression. It offers
 contracting rewrites or rewrites exposing reflexivity/an existing assumption.
 It retains every conditional premise as an obligation. Both provide ordinary
 proof commands for checked suggestions; neither controls search or commitment.
+
+Importing `waterfall.ArithmeticWitness` makes `Critics.arithmeticWitness`
+available without enabling it in the default tactic. It reads equations in an
+existential over `Nat`, works backward through addition, multiplication,
+successor and subtraction, and proposes a witness. For example, `n = 2 * k`
+suggests `n / 2`. The original body remains an obligation, so truncation, a
+failed divisibility condition, or an incompatible conjunct cannot be ignored.
+The provider handles a single occurrence along an arithmetic expression; it is
+not a complete arithmetic solver or a generator of arbitrary terms.
+
+```lean
+import waterfall
+import waterfall.ArithmeticWitness
+
+open waterfall in
+example (n : Nat) : ∃ k, n = 3 * k + n % 3 := by
+  run_tac
+    discard <| run {} #[]
+      (Critic.hooks #[Critics.arithmeticWitness] Mode.search.hooks)
+```
+
+The same adapter accepts `Mode.committed.hooks`; a committed search can retain
+an unsuccessful witness choice, whereas search mode can backtrack over it.
+`Tests/ArithmeticWitness.lean` checks corpus-shaped goals, invalid witnesses,
+plan replay and standalone suggestions.
 
 `Scheduling.exposesMoves producer` performs read-only lookahead after root
 introductions. Search mode uses it with `Critics.propose` to decide whether to
