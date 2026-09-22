@@ -72,6 +72,7 @@ public def exposeConstructors (obstructions : Array FVarId × Array FVarId)
   Evidence := Name
   observe := fun _ => pure #[if obstructions.1.contains major then `blockedMatch
     else if obstructions.2.contains major then `constructorField else .anonymous]
-  repair := fun _ role => pure (alternatives.map fun move => {move with role}) }
+  repair := fun _ role => pure (alternatives.map fun move =>
+    if role.isAnonymous then move else {move with role}) }
 
 end waterfall.Critics
