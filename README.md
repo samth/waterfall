@@ -29,20 +29,32 @@ The current release is **waterfall 0.1** You can find the website at
 [Website and documentation](https://samth.github.io/waterfall/).
 
 
-## Software Foundations
+## Benchmark results
 
-Across an agent-generated port of Software Foundations, waterfall proves 1,455 of the goals, out of 2,190 total. The following table summarizes the results:
+On the full 2,645-entry inductive-bench selection, `waterfall` proves **1,615 of
+2,631 theorem goals**, up from **1,594**: 22 gains and 1 loss on the same
+inputs. The remaining 14 entries are executable definitions, excluded from the
+goal counts below.
 
-| Volume | Goals | Baseline | Search | Committed |
-| --- | ---: | ---: | ---: | ---: |
-| LF | 937 | 659 | 740 | 739 |
-| PLF | 744 | 230 | 325 | 354 |
-| VFA | 509 | 315 | 390 | 354 |
-| Total | 2,190 | 1,204 | 1,455 | 1,447 |
+| Suite | Goals | Previous main | Current main |
+| --- | ---: | ---: | ---: |
+| Software Foundations: LF | 949 | 799 | 800 |
+| Software Foundations: PLF | 744 | 314 | 314 |
+| Software Foundations: VFA | 509 | 338 | 341 |
+| TIP/CLAM | 173 | 77 | 87 |
+| Leon | 87 | 30 | 31 |
+| MiniF2F induction | 13 | 11 | 11 |
+| VProver (IndBen-156) | 156 | 25 | 31 |
+| Total | 2,631 | 1,594 | 1,615 |
 
-"Baseline" here combines `simp_all`, `grind`, and `induction` followed by `simp_all`/`grind`.
+Measured on 2026-09-22 with Lean 4.30.0, default search, effort 1,000, and one
+Lean thread, comparing `dde8f2e` with `8d7d84b` through the unchanged benchmark
+infrastructure. VProver includes only the established IndBen-156 subset.
+These are individual-goal results with the source theory available; earlier
+benchmark lemmas may be supplied as assumptions. The comparison measures proof
+coverage, with no speedup claim.
 
-The "Committed" mode for `waterfall` avoids backtracking, and thus can be faster but may miss some proofs. 
+[Measurement details and per-suite results](https://github.com/samth/waterfall/blob/main/docs/benchmarks/2026-09-22.md).
 
 For small examples you can read and run, see [Tutorial/Examples.lean](Tutorial/Examples.lean):
 
