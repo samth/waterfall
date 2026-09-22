@@ -1,5 +1,6 @@
 module
 public import waterfall.Core
+public meta import Lean.Elab.Tactic.RenameInaccessibles
 
 meta section
 
@@ -28,7 +29,8 @@ public structure Script where
   text : String
   usedTerm : Bool
 
-private def sequence (commands : Array (TSyntax `tactic)) : TacticM (TSyntax `tactic) :=
+private def sequence (commands : Array (TSyntax `tactic)) : TacticM (TSyntax `tactic) := do
+  if commands.size == 1 then return commands[0]!
   `(tactic| ($commands:tactic*))
 
 private def grindCommand (rules : Array (TSyntax `term)) (strength : Nat)
@@ -129,6 +131,245 @@ private def checkText (initial : Tactic.SavedState) (roots : List MVarId)
   unless (← getUnsolvedGoals).isEmpty do throwError "replacement left obligations"
   return ⟨⟨stx⟩, text, usedTerm⟩
 
+/-- The retained search trace is an agenda traversal, not a proof script. Recover
+its parent/child structure before printing: a policy can visit siblings in any
+order. Shared obligations that do not form a tree keep the checked trace fallback. -/
+private inductive ProofTree where
+  | step (selection : Selection) (saved : Tactic.SavedState) (children : Array ProofTree)
+
+private def proofForest (roots : List MVarId) (path : Path) : TacticM (Array ProofTree) := do
+  let mut forest : Array (MVarId × ProofTree) := #[]
+  for (step, saved) in path do
+    let some goal := step.agenda[step.focus]? | throwError "missing recorded goal"
+    let siblings := step.agenda.eraseIdx step.focus
+    let children := forest.filter (fun entry => !siblings.contains entry.1)
+    unless children.size == step.children do throwError "retained path is not a complete proof tree"
+    let parent := ProofTree.step step saved (children.map (·.2))
+    let available := (forest.filter fun entry => siblings.contains entry.1).push (goal, parent)
+    forest := step.agenda.toArray.filterMap fun g => available.find? (·.1 == g)
+  unless forest.map (·.1) == roots.toArray do throwError "retained path does not cover the roots"
+  return forest.map (·.2)
+
+/-- Flatten only syntactic grouping, not tacticals such as `first` or `<;>`.
+Every structured branch is already focused, so the trace's `focus` is redundant. -/
+private partial def commandsOf (tac : TSyntax `tactic) : Array (TSyntax `tactic) :=
+  match tac with
+  | `(tactic| ($commands:tactic*)) => commands.getElems.flatMap commandsOf
+  | `(tactic| focus ($body:tactic)) => commandsOf body
+  | _ => #[tac]
+
+/-- Pretty-printing must use names visible in the replayed branch, not fresh
+names from the search checkpoint. Corresponding declarations retain their order;
+if a recipe changes that context shape, abandon this rendering and check the
+faithful trace instead. The final parsed proof remains the correctness check. -/
+private def inRecordedContext (step : Selection) (saved winning : Tactic.SavedState)
+    (body : Option Expr → TacticM α) : TacticM α := do
+  let live ← Tactic.saveState
+  let names ← (← getMainGoal).withContext do
+    return (← getLCtx).foldl (fun out d => out.push d.userName) (#[] : Array Name)
+  try
+    let some goal := step.agenda[step.focus]? | throwError "missing recorded goal"
+    let forwardProof? ← if step.action.group == .forward then do
+      winning.restore true
+      let some (.app _ value) ← getExprMVarAssignment? goal
+        | throwError "missing forward-step assignment"
+      pure (some (← instantiateMVars value))
+    else pure none
+    saved.restore true
+    let decl ← goal.getDecl
+    let locals := decl.lctx.foldl (fun out d => out.push d) (#[] : Array LocalDecl)
+    unless locals.size == names.size do throwError "replay changed the local context shape"
+    let mut lctx := decl.lctx
+    for d in locals, name in names do lctx := lctx.setUserName d.fvarId name
+    let renamed ← mkFreshExprMVarAt lctx decl.localInstances decl.type .syntheticOpaque decl.userName
+    setGoals [renamed.mvarId!]
+    body forwardProof?
+  finally live.restore true
+
+/-- Keep each supplied/discovered rule once. Identifier aliases often name the
+same definition; elaboration is used only for deduplication, never inference. -/
+private def distinctRules (rules : Array (TSyntax `term)) : TacticM (Array (TSyntax `term)) := do
+  let mut seen : Array Expr := #[]
+  let mut out := #[]
+  for rule in rules do
+    let value ← withoutModifyingState <| Term.elabTerm rule none
+    if seen.contains value then continue
+    seen := seen.push value
+    out := out.push rule
+  return out
+
+/-- Concise recipes are proposals. Try ordinary solver defaults before retaining
+scaled settings from discovery. Leaves must close and normalization must retain
+the expected branches; final replay checks the continuation and shared holes. -/
+private def conciseRecipes (step : Selection) (rules : Array (TSyntax `term)) :
+    TacticM (Array (TSyntax `tactic)) := withMainContext do
+  if step.closure == .simplification || step.label == "normalize" then
+    let rules ← distinctRules (← prepareRules (← getMainGoal) rules)
+    let rs ← rules.mapM fun t => `(simpLemma| $t:term)
+    if rs.isEmpty then return #[← `(tactic| simp_all)]
+    return #[← `(tactic| simp_all [$rs,*])]
+  match step.closure with
+  | .exact =>
+    let mut out := #[]
+    if let some id ← findLocalDeclWithType? (← (← getMainGoal).getType) then
+      let name := mkIdent (← id.getDecl).userName
+      out := out.push (← `(tactic| exact $name:ident))
+    return out ++ #[← `(tactic| rfl), ← `(tactic| contradiction)]
+  | .saturation =>
+    if step.label != "grind" then return #[]
+    let rules ← distinctRules (← prepareRules (← getMainGoal) rules)
+    let rs ← rules.mapM fun t => `(grindParam| $t:term)
+    if rs.isEmpty then return #[← `(tactic| grind)]
+    return #[← `(tactic| grind [$rs,*])]
+  | _ => return #[]
+
+/-- Introduce variables with ordinary, collision-free names at their binder.
+This runs only while rendering a known proof and does not add engine moves. -/
+private def namedIntros (all : Bool) : TacticM (TSyntax `tactic) := do
+  let saved ← Tactic.saveState
+  let mut names : Array (TSyntax `term) := #[]
+  try
+    repeat
+      let goal ← getMainGoal
+      let type ← goal.withContext <| whnf (← goal.getType)
+      let .forallE binder domain _ _ := type | break
+      let name ← goal.withContext do
+        let base ← if binder.isAnonymous || binder == `_ || binder.hasMacroScopes then do
+          if ← isProp domain then pure `h else pure `x
+        else pure binder
+        return (← getLCtx).getUnusedName base
+      names := names.push ⟨mkIdent name⟩
+      setGoals [(← goal.intro name).2]
+      unless all do break
+    unless !names.isEmpty do throwError "no binders to introduce"
+    `(tactic| intro $names*)
+  finally saved.restore true
+
+/-- Name only inaccessible/shadowed locals, at a case boundary when possible.
+Existing user names are preserved. Unlike `expose_names`, the emitted names
+are explicit in the proof text and independent of subsequent elaborator choices. -/
+private def branchNames (goal : MVarId) : TacticM (Array (TSyntax ``binderIdent)) := goal.withContext do
+  let original ← getLCtx
+  let exposed ← withExposedNames getLCtx
+  let mut names := #[]
+  for d in exposed do
+    unless d.isImplementationDetail || (original.get! d.fvarId).userName == d.userName do
+      names := names.push (← `(binderIdent| $(mkIdent d.userName):ident))
+  return names
+
+/-- A branch has an explicit binding site and a complete body. Prefer native
+eliminator alternatives; ordinary splits and applications need only bullets. -/
+private structure Branch where
+  tag : Name
+  allFields : Bool := false
+  names : Array (TSyntax ``binderIdent)
+  body : Array (TSyntax `tactic)
+
+private def nestBranches (commands : Array (TSyntax `tactic)) (branches : Array Branch) :
+    TacticM (Array (TSyntax `tactic)) := do
+  let mut alts : Array (TSyntax ``inductionAlt) := #[]
+  for branch in branches do
+    let names ← branch.names.mapM fun name => do
+      let `(binderIdent| $id:ident) := name | throwError "missing branch binder"
+      pure (⟨id.raw⟩ : TSyntax [`ident, ``Lean.Parser.Term.hole])
+    let tag := mkIdent branch.tag
+    alts := alts.push (← if branch.allFields then
+      `(inductionAlt| | @$tag:ident $names* => $branch.body:tactic*)
+      else `(inductionAlt| | $tag:ident $names* => $branch.body:tactic*))
+  if let some last := commands.back? then
+    let nested? ← match last with
+      | `(tactic| induction $major:term) =>
+        pure <| some (← `(tactic| induction $major:term with $alts:inductionAlt*))
+      | `(tactic| fun_induction $call:term) =>
+        pure <| some (← `(tactic| fun_induction $call:term with $alts:inductionAlt*))
+      | `(tactic| cases $major:term) =>
+        pure <| some (← `(tactic| cases $major:term with $alts:inductionAlt*))
+      | _ => pure none
+    if let some nested := nested? then return commands.pop.push nested
+  let mut out := commands
+  for branch in branches do
+    let body := branch.body
+    if branch.names.isEmpty then
+      out := out.push (← `(tactic| · $body:tactic*))
+    else if branch.tag.isAnonymous then
+      let body := #[← `(tactic| rename_i $branch.names*)] ++ body
+      out := out.push (← `(tactic| · $body:tactic*))
+    else
+      let tag ← `(binderIdent| $(mkIdent branch.tag):ident)
+      out := out.push (← `(tactic| case $tag:binderIdent $branch.names* => $body:tactic*))
+  return out
+
+/-- Replay the tree in proof order while constructing nested branch syntax.
+The renderer owns no search state: every operation comes from the winning path. -/
+private partial def renderTree (tree : ProofTree) (rules : Array (TSyntax `term))
+    (hooks : Hooks) (winning : Tactic.SavedState) (compact : Bool) :
+    TacticM (Array (TSyntax `tactic)) := do
+  let .step step saved children := tree
+  let roots ← getUnsolvedGoals
+  let mut recipes ← inRecordedContext step saved winning fun forward => do
+    let mut simple ← if compact then conciseRecipes step rules else pure #[]
+    let original ← command step rules hooks forward
+    if compact then
+      if let `(tactic| set_option tactic.customEliminators false in cases $major:term) := original then
+        simple := simple.push (← `(tactic| cases $major:term))
+    return simple.push original
+  if step.preparation == .oneBinder || step.preparation == .allBinders then
+    recipes := #[← namedIntros (step.preparation == .allBinders)]
+  let checkpoint ← Tactic.saveState
+  let mut selected := none
+  for recipe in recipes do
+    checkpoint.restore true
+    try
+      let commands := commandsOf recipe
+      for tac in commands do Term.withoutErrToSorry <| withoutRecover <| evalTactic tac
+      unless (← getUnsolvedGoals).length == children.size do
+        throwError "recipe changed the number of branches"
+      selected := some commands
+      break
+    catch _ => pure ()
+  let some commands := selected | throwError "no replayable recipe"
+  let mut out := commands
+  let mut branches := #[]
+  let goals ← getUnsolvedGoals
+  for child in children, goal in goals do
+    setGoals [goal]
+    let names ← branchNames goal
+    if children.size == 1 && names.isEmpty then
+      out := out ++ (← renderTree child rules hooks winning compact)
+    else
+      let tag ← goal.getTag
+      let allFields ← goal.withContext do
+        let original ← getLCtx
+        let exposed ← withExposedNames getLCtx
+        return exposed.any fun d =>
+          !d.isImplementationDetail && d.binderInfo != .default &&
+          (original.get! d.fvarId).userName != d.userName
+      let renamed ← renameInaccessibles goal names
+      setGoals [renamed]
+      renamed.setTag .anonymous
+      let body ← renderTree child rules hooks winning compact
+      branches := branches.push {tag, allFields, names, body}
+  unless branches.isEmpty do out ← nestBranches commands branches
+  checkComplete roots
+  setGoals []
+  return out
+
+private def structuredScript (initial winning : Tactic.SavedState) (roots : List MVarId)
+    (forest : Array ProofTree) (rules : Array (TSyntax `term)) (hooks : Hooks)
+    (compact : Bool) : TacticM Script := do
+  initial.restore true
+  let mut out := #[]
+  for tree in forest, goal in roots do
+    setGoals [goal]
+    let names ← branchNames goal
+    let renamed ← renameInaccessibles goal names
+    setGoals [renamed]
+    let mut body ← renderTree tree rules hooks winning compact
+    unless names.isEmpty do body := #[← `(tactic| rename_i $names*)] ++ body
+    if roots.length == 1 then out := out ++ body
+    else out := out.push (← `(tactic| · $body:tactic*))
+  checkText initial roots (← sequence out) false
+
 /-- Leaf solvers may create private auxiliary declarations. A pasted proof
 cannot refer to declarations that existed only after the search. Inline those
 new constants, retaining existing named lemmas from the original environment. -/
@@ -155,6 +396,17 @@ public def compile (initial : Tactic.SavedState) (roots : List MVarId)
   let winning ← Tactic.saveState
   let proofs ← roots.mapM fun g => instantiateMVars (mkMVar g)
   try
+    let forest? ← tryCatch (some <$> proofForest roots path) (fun ex => do
+      trace[waterfall.suggestions] "proof tree reconstruction failed: {ex.toMessageData}"
+      pure none)
+    if let some forest := forest? then
+      for compact in [true, false] do
+        let script? ← tryCatch
+          (some <$> structuredScript initial winning roots forest rules hooks compact)
+          (fun ex => do
+            trace[waterfall.suggestions] "structured rendering failed: {ex.toMessageData}"
+            pure none)
+        if let some script := script? then return script
     tryCatch (do
       let mut commands := #[]
       for (step, saved) in path.reverse do

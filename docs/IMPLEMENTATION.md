@@ -131,12 +131,26 @@ Generalization and induction commands come from the move's exact preparation
 plan, including fixed-index repair. The frontend does not reconstruct parameter
 selection from the context or infer it from motive tags.
 Forward instantiation prints `have` using the small derivation supplied to
-`MVarId.note`, recovered from the winning assignment. It uses `case'` to select a later sibling while preserving the other
-goals' order. Extension moves are regenerated with their installed hooks; critics
-supply ordinary proof commands through `Move.command?`. If command rendering fails, it prints the completed proof term,
-inlining solver-generated auxiliary declarations. Only a checked replacement is
-offered through Lean's editor hint. Each parallel worker has its own recorder;
-only the winning worker's hint is retained.
+`MVarId.note`, recovered from the winning assignment. The renderer reconstructs
+a proof tree from the recorded agendas, independently of the order in which
+search visited siblings. It replays that tree with explicit introduction names,
+native induction/case alternatives, and nested bullets. Names in command recipes
+are translated from the recorded context to the replayed context.
+
+Ordinary `simp_all` and `grind` calls are tried before the scaled configurations
+used during search; repeated rule arguments are removed. Exact leaves use
+`exact`, `rfl`, or `contradiction` when possible. Each proposed replacement is
+checked by parsing and elaborating its displayed text with recovery disabled.
+This is presentation work and does not change proof discovery.
+
+Extension moves are regenerated with their installed hooks; critics supply
+ordinary proof commands through `Move.command?`. Shared witness dependencies or
+an adapter's context changes may prevent tree rendering. In that case the
+frontend retains the checked execution-order script; if recipes also fail, it
+prints the completed proof term, inlining solver-generated auxiliary declarations.
+These fallbacks can still contain explicit naming or goal-navigation commands.
+Each parallel worker has its own recorder; only the winning worker's hint is
+retained.
 
 ## Refactoring boundary
 

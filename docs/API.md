@@ -46,6 +46,10 @@ not rolled back. `Stats.choices` contains retained labels in reverse proof order
 
 `waterfall?` installs `Suggestions.run` inside each worker. It records only
 accepted steps and gives the winning proof a checked editor replacement.
+Suggestions prefer explicit `intro` names, native induction/case alternatives,
+and nested bullets. Solver configurations are omitted when ordinary defaults
+replay successfully. Shared-goal dependencies or unsupported structured recipes
+can require an execution-order script or proof-term fallback.
 `Suggestions.compile` accepts the input checkpoint, original goals, retained
 path, rules and optional hooks; it returns `Script` (`tactic`, `text`, `usedTerm`) while restoring
 the completed proof. It reparses the printed text and requires all original
