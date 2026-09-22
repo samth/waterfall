@@ -70,17 +70,14 @@ private def functionalCommand (move : Move) : TacticM (TSyntax `tactic) := do
   if others.isEmpty then return tactic
   `(tactic| (revert $others*; $tactic))
 
-/-- Ordinary induction, including the equation-preserving abstraction needed
-when an indexed relation is applied to a fixed expression. These are standard
-`revert`, `generalize`, and `induction` commands; search still owns the motive. -/
+/-- Ordinary induction and parameter reversion. Specialized motive repairs
+supply their own checked commands through `Move.command?`. -/
 private def inductionCommand (step : Selection) (major : FVarId) :
     TacticM (TSyntax `tactic) := do
   let target := mkIdent (← major.getDecl).userName
   let declaredType ← inferType (mkFVar major)
-  let majorType ← whnf declaredType
   let mut commands := #[]
-  let generalized := step.motive == InductionMotive.localGeneralization ||
-    step.motive == InductionMotive.localGeneralizationAndIndexAbstraction
+  let generalized := step.motive == InductionMotive.localGeneralization
   if generalized then
     let mut others : Array (TSyntax `ident) := #[]
     for d in (← getLCtx) do
@@ -88,21 +85,6 @@ private def inductionCommand (step : Selection) (major : FVarId) :
           (← isProp d.type) || (← isType (mkFVar d.fvarId)) || declaredType.containsFVar d.fvarId do
         others := others.push (mkIdent d.userName)
     unless others.isEmpty do commands := commands.push (← `(tactic| revert $others*))
-  if step.motive == InductionMotive.indexAbstraction ||
-      step.motive == InductionMotive.localGeneralizationAndIndexAbstraction then
-    let .const name _ := majorType.getAppFn | throwError "missing indexed relation"
-    let info ← getConstInfoInduct name
-    let mut indices : Array Expr := #[]
-    let mut args : Array (TSyntax ``generalizeArg) := #[]
-    for index in majorType.getAppArgs[info.numParams:] do
-      unless index.isFVar || indices.contains index do
-        let n := indices.size
-        indices := indices.push index
-        let expr ← PrettyPrinter.delab index
-        let x := mkIdent ((← getLCtx).getUnusedName (Name.mkSimple s!"wf_index{n}"))
-        let h := mkIdent ((← getLCtx).getUnusedName (Name.mkSimple s!"wf_index_eq{n}"))
-        args := args.push (← `(generalizeArg| $h:ident : $expr = $x:ident))
-    commands := commands.push (← `(tactic| generalize $args,* at $target:ident))
   let induction ← `(tactic| induction $target:ident)
   let induction ← if generalized then `(tactic| $induction <;> intros) else pure induction
   sequence (commands.push induction)

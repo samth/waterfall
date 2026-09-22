@@ -37,15 +37,26 @@ public def Critic.propose (critic : Critic) (goal : MVarId) : Choices Move := fu
       if ← visit move then return true
   return false
 
-/-- The existing engine orders finite batches. Materialization happens only at
-this adapter; critics themselves have no policy, trial or execution callback. -/
-public def Critic.hooks (critics : Array Critic) (inner : Hooks := {}) : Hooks := { inner with
-  extraMoves := fun goal rules strength remaining group => do
-    let original ← inner.extraMoves goal rules strength remaining group
-    if group != .hypotheses then return original
+/-- Install context-dependent critics in one operation group. The factory sees
+the same supplied rules, strength and remaining depth as ordinary generators.
+It chooses providers, not search order; existing moves retain their selectors.
+For interleaving repairs with individual basic operations, call `propose` at the
+required generation point instead of appending a second copy through hooks. -/
+public def Critic.hooksFor (group : Group)
+    (critics : Array (TSyntax `term) → Nat → Nat → Array Critic)
+    (inner : Hooks := {}) : Hooks := { inner with
+  extraMoves := fun goal rules strength remaining requested => do
+    let original ← inner.extraMoves goal rules strength remaining requested
+    if requested != group then return original
     let mut moves := original
-    for critic in critics do
+    for critic in critics rules strength remaining do
       moves := moves ++ (← (critic.propose goal).collect)
     return moves }
+
+/-- A fixed set of providers, normally in the hypotheses group. Materialization
+happens at this adapter; critics own no traversal or resource accounting. -/
+public def Critic.hooks (critics : Array Critic) (inner : Hooks := {})
+    (group : Group := .hypotheses) : Hooks :=
+  Critic.hooksFor group (fun _ _ _ => critics) inner
 
 end waterfall

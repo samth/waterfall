@@ -1,6 +1,6 @@
 # Reading the proof engine
 
-Start with `movesFor` in [Core.lean](../waterfall/Core.lean). Its eight cases are
+Start with `movesFor` in [Operations.lean](../waterfall/Operations.lean). Its eight cases are
 the proof vocabulary. Each calls a named generator that **proposes** proof steps;
 it does not yet apply them. A `Move` holds the deferred inference, its intrinsic
 cost, and semantic metadata for scheduling. Array order matters: recorded plans
@@ -20,14 +20,16 @@ identify a step by its group and its original ordinal.
 Smaller proof operations have their own names too. `simplification` configures
 the same strength-scaled simplifier for closure and normalization. `caseAlternatives`
 offers the registered view before raw cases and respects Lean's
-`tactic.customEliminators` option. `chooseImplicitWitnesses` proposes one
+`tactic.customEliminators` option. `Critics.implicitWitnesses` proposes one
 constructor layer for one implicit argument whose type visibly reduces to an
 inductive type; it does not synthesize nested terms, multiple witnesses, or
 arbitrary lemma arguments. Every unresolved constructor field remains an
 obligation. Local functions can also be applied to data-valued goals, including
-Type-valued induction hypotheses. `MotivePlan` records which variables to generalize and
-whether to abstract fixed indices with equations; `inductWithMotive` performs
-that preparation, induction, and reintroduction of dependent assumptions.
+Type-valued induction hypotheses. `Critics.fixedIndices` proposes equation-preserving
+index abstraction, optionally combined with the caller's parameter generalization.
+Both repairs use the shared `Induction.perform` executor, which reintroduces the
+full reverted dependency closure into the cases. The generator still chooses
+which parameters to generalize; the critic owns index analysis and abstraction.
 
 ## From a proposed step to a complete proof
 
@@ -78,9 +80,19 @@ the target except for one proposition and another premise is present. The
 quantified-rewrite critic matches a local equality at a target subexpression,
 records the rule and direction, then reconstructs the specialization during
 execution. Conditional premises become sibling obligations. Quantified rewriting is
-opt-in through `Critic.hooks`; the default retains only the blocked-premise
-provider. Neither critic
-has a search loop, a trial schedule, or a proof-acceptance path.
+opt-in through `Critic.hooks`; the default hypothesis hook installs the
+blocked-premise provider. [ConstructorCritics.lean](../waterfall/ConstructorCritics.lean)
+and [InductionCritics.lean](../waterfall/InductionCritics.lean) supply the built-in
+implicit-witness and fixed-index repairs directly at their existing generation
+points. [ArithmeticWitness.lean](../waterfall/ArithmeticWitness.lean) supplies an
+optional arithmetic provider. None owns a search loop, trial schedule, or proof
+acceptance path.
+
+`Critic.hooksFor` selects an operation group and passes rules, strength and
+remaining depth to a provider factory. Appending through this adapter preserves
+existing selectors. Embedded uses of `Critic.propose` also preserve the placement
+of repairs relative to each ordinary operation, such as a major premise's direct
+and generalized induction alternatives.
 
 [Scheduling.lean](../waterfall/Scheduling.lean) independently performs bounded
 lookahead after introductions and orders preparatory moves before expensive
@@ -105,11 +117,12 @@ counters and other external callback effects cannot be rolled back.
 renders ordinary proof commands, and checks the printed text from the original
 checkpoint. Tactic adapters share existing commands through optional metadata;
 Meta operations have frontend recipes for induction, cases and constructors.
-Fixed-index induction prints equation-preserving `generalize` commands first.
+The fixed-index critic supplies its own equation-preserving `generalize` and
+induction commands; the frontend does not reconstruct that repair.
 Forward instantiation prints `have` using the small derivation supplied to
 `MVarId.note`, recovered from the winning assignment. It uses `case'` to select a later sibling while preserving the other
 goals' order. Extension moves are regenerated with their installed hooks; critics
-supply their own `by_cases` or `rewrite` commands through `Move.command?`. If command rendering fails, it prints the completed proof term,
+supply ordinary proof commands through `Move.command?`. If command rendering fails, it prints the completed proof term,
 inlining solver-generated auxiliary declarations. Only a checked replacement is
 offered through Lean's editor hint. Each parallel worker has its own recorder;
 only the winning worker's hint is retained.

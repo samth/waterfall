@@ -6,6 +6,9 @@ import waterfall.Committed
 import waterfall.Core
 import waterfall.Critics
 import waterfall.ArithmeticWitness
+import waterfall.ConstructorCritics
+import waterfall.InductionCritics
+import waterfall.Induction
 import waterfall.InductionPlan
 import waterfall.Observe
 import waterfall.Operations
@@ -44,9 +47,12 @@ run_cmd do
       `waterfall.Committed.hooks,
       `waterfall.movesFor, `waterfall.prepareRules, `waterfall.operations,
       `waterfall.Critic, `waterfall.Critic.propose, `waterfall.Critic.hooks,
+      `waterfall.Critic.hooksFor,
       `waterfall.Critics.propose, `waterfall.Critics.blockedPremise, `waterfall.Critics.blockedPremises,
       `waterfall.Critics.quantifiedRewrite,
       `waterfall.Critics.arithmeticWitness,
+      `waterfall.Critics.implicitWitnesses, `waterfall.Critics.fixedIndices,
+      `waterfall.Induction.perform,
       `waterfall.Critics.hooks,
       `waterfall.InductionPlan.Plan, `waterfall.InductionPlan.equivalent,
       `waterfall.InductionPlan.deduplicate, `waterfall.InductionPlan.quality,

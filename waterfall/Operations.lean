@@ -1,6 +1,8 @@
 module
 public import waterfall.Execution
 public import waterfall.InductionPlan
+public import waterfall.ConstructorCritics
+public import waterfall.InductionCritics
 public meta import Lean.Elab.Tactic.Induction
 public meta import Lean.Elab.Tactic.Grind.Main
 public meta import Lean.Meta.Tactic.Grind.Types
@@ -179,30 +181,6 @@ private def closeGoal (rules : Array (TSyntax `term)) (strength : Nat) :
     { grind true with closure := .saturation }].map (fun m => { m with cost := 0 }) ++
       constructors.map (fun m => { m with closure := .constructor })
 
--- Propose one constructor layer for an implicit data argument before unification.
--- Enumeration retains only binder positions and declaration names, never fresh
--- metavariables. Unification fills fields where possible; every unresolved field
--- remains an obligation. Nested witnesses blocked by reduction need more search
--- machinery than this fallback, which chooses only the outer constructor.
-private def chooseImplicitWitnesses (g : MVarId) (ctor : Name) : TacticM (Array Move) := do
-  let choices ← withoutModifyingState do
-    forallTelescopeReducing (← inferType (← mkConstWithFreshMVarLevels ctor)) fun xs _ => do
-      let mut choices := #[]
-      for i in [:xs.size] do
-        let d ← getFVarLocalDecl xs[i]!
-        if d.binderInfo.isExplicit || d.binderInfo.isInstImplicit || (← isProp d.type) then continue
-        let .const n _ := (← whnf d.type).getAppFn | continue
-        let some (.inductInfo info) := (← getEnv).find? n | continue
-        for c in info.ctors do choices := choices.push (i, c)
-      return choices
-  return choices.map fun (i, witness) => {
-    cost := 2, label := s!"constructor {ctor} witness {i} {witness}"
-    run := g.withContext do
-      let fn ← mkConstWithFreshMVarLevels ctor
-      let (xs, _, _) ← forallMetaTelescopeReducing (← inferType fn)
-      discard <| xs[i]!.mvarId!.apply (← mkConstWithFreshMVarLevels witness)
-      setGoals (← g.apply (mkAppN fn xs)) }
-
 private def customElim? (id : FVarId) (induction : Bool) : TacticM (Option Name) := do
   if tactic.customEliminators.get (← getOptions) then
     getCustomEliminator? #[mkFVar id] induction
@@ -298,7 +276,8 @@ private def applyRules (g : MVarId) (rules : Array (TSyntax `term)) (maxCost : N
         out := out.push { cost := 1, label := s!"constructor {ctor}", run := do
           setGoals (← g.apply (← mkConstWithFreshMVarLevels ctor)) }
       if maxCost >= 2 then
-        for ctor in info.ctors do out := out ++ (← chooseImplicitWitnesses g ctor)
+        for ctor in info.ctors do
+          out := out ++ (← ((Critics.implicitWitnesses ctor).propose g).collect)
   return out
 
 /-- Retrieve indexed library theorems and offer their individual applications. -/
@@ -419,13 +398,6 @@ private def followRecursion (g : MVarId) (rules : Array (TSyntax `term)) : Tacti
             else `(tactic| fun_induction $t)) }
   return out
 
-/-- How to prepare the induction motive. Generalized variables are universally
-quantified in the cases; abstracting fixed indices retains their equations. The
-major premise and its induction kind belong to the enclosing proposed move. -/
-private structure MotivePlan where
-  generalize : Array FVarId := #[]
-  abstractIndices : Bool := false
-
 /-- Induct on data or evidence, varying the motive; also retain ordinary data cases. -/
 private def inductOrAnalyzeData (g : MVarId) : TacticM (Array Move) := do
   let mut out : Array Move := #[]
@@ -453,79 +425,32 @@ private def inductOrAnalyzeData (g : MVarId) : TacticM (Array Move) := do
         if !(← isProp other.type) && !(← isType (mkFVar other.fvarId)) &&
             !d.type.containsFVar other.fvarId then
           others := others.push other.fvarId
-      -- Ordinary Lean induction handles indexed relations as well as data.
-      -- The lower-level MVarId.induction API alone does not perform all of its
-      -- index preparation, so replacing this adapter needs equivalent handling.
-      let inductWithMotive (motive : MotivePlan) : TacticM Unit := do
-        let (reverted, goal) ← g.revert motive.generalize
-        let mut goal := goal
-        let mut major := mkFVar d.fvarId
-        if motive.abstractIndices then
-          -- Fixed indices must become variables before ordinary induction.
-          -- Keep equations, so the motive and IH retain their original meaning.
-          let mut args : Array GeneralizeArg := #[]
-          for index in ty.getAppArgs[info.numParams:] do
-            unless index.isFVar || args.any (·.expr == index) do
-              args := args.push {expr := index, hName? := some (← mkFreshUserName `index_eq)}
-          if args.isEmpty then throwError "no fixed induction indices"
-          let (subst, _, prepared) ← goal.withContext <| goal.generalizeHyp args #[d.fvarId]
-          goal := prepared
-          major := subst.apply major
-        setGoals [goal]
-        let majorSyntax ← goal.withContext <| Term.exprToSyntax major
-        evalTactic (← `(tactic| induction $majorSyntax:term))
-        -- Revert closes over dependent hypotheses too. Reintroduce the full
-        -- returned list, not merely the variables explicitly selected above.
-        let children ← (← getUnsolvedGoals).mapM fun child => do
-          return (← child.introNP reverted.size).2
-        setGoals children
-      let mut fixedIndices := 0
-      for index in ty.getAppArgs[info.numParams:] do
-        unless index.isFVar do fixedIndices := fixedIndices + 1
-      let summary (motive : MotivePlan) : InductionSummary := {
+      let inductWithParameters (variables : Array FVarId) : TacticM Unit := do
+        let (reverted, goal) ← g.revert variables
+        Induction.perform goal (mkFVar d.fvarId) reverted.size
+      let summary : InductionSummary := {
         coveredCalls := covered.size,
         changingArguments,
-        generalized := motive.generalize.size,
-        abstractedIndices := if motive.abstractIndices then fixedIndices else 0,
         expectedCases := info.ctors.length }
       if !others.isEmpty then
-        let motive : MotivePlan := { generalize := others }
         out := out.push {
           cost := 1
           induction := kind
           major := some d.fvarId
-          inductionSummary := some (summary motive)
+          inductionSummary := some {summary with generalized := others.size}
           label := s!"induction {d.userName} generalized"
-          run := inductWithMotive motive
+          run := inductWithParameters others
           motive := InductionMotive.localGeneralization }
-      let motive : MotivePlan := {}
       out := out.push {
         cost := 1
         induction := kind
         major := some d.fvarId
-        inductionSummary := some (summary motive)
+        inductionSummary := some summary
         label := s!"induction {d.userName}"
-        run := inductWithMotive motive }
-      if ty.getAppArgs[info.numParams:].any (fun index => !index.isFVar) then
-        let motive : MotivePlan := { abstractIndices := true }
-        out := out.push {
-          cost := 1
-          induction := kind
-          major := some d.fvarId
-          inductionSummary := some (summary motive)
-          label := s!"induction {d.userName} abstract indices"
-          run := inductWithMotive motive
-          motive := InductionMotive.indexAbstraction }
-        if !others.isEmpty then
-          let motive : MotivePlan := { generalize := others, abstractIndices := true }
-          out := out.push {
-            cost := 1
-            induction := kind
-            major := some d.fvarId
-            inductionSummary := some (summary motive)
-            label := s!"induction {d.userName} generalized abstract indices"
-            run := inductWithMotive motive
-            motive := InductionMotive.localGeneralizationAndIndexAbstraction }
+        run := inductWithParameters #[] }
+      -- Repairs remain adjacent to their major premise's ordinary schemes.
+      -- Appending them in a later global batch would change search and replay.
+      out := out ++ (← ((Critics.fixedIndices d.fvarId others summary).propose g).collect)
     -- Noninductive case analysis is another alternative, useful for tests and
     -- discriminants where induction would introduce irrelevant hypotheses.
     if !(← isProp d.type) then

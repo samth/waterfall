@@ -15,6 +15,9 @@ small interfaces.
 | `waterfall.Repair` | Typed obstruction analysis and deferred repair proposals |
 | `waterfall.Critics` | Blocked-premise splitting and quantified-equality specialization |
 | `waterfall.ArithmeticWitness` | Optional arithmetic witness synthesis through `Critic` |
+| `waterfall.ConstructorCritics` | Built-in implicit constructor-witness repairs |
+| `waterfall.InductionCritics` | Built-in equation-preserving fixed-index repairs |
+| `waterfall.Induction` | Ordinary induction on an already-prepared major premise |
 | `waterfall.Scheduling` | Bounded preparation lookahead and staged search |
 | `waterfall.Choices` | Generic lazy selection, filtering, collection and commitment |
 | `waterfall.Parallel` | Isolated concurrent trials, shared work accounting and cancellation |
@@ -104,10 +107,31 @@ returned moves must refer only to the input checkpoint. Temporary metavariables
 created while probing cannot escape; a recipe can reconstruct them on execution.
 External IO effects are not rolled back.
 
-`Critic.hooks critics inner` appends repairs in the hypotheses group, preserving
-all existing moves and the consumer's policy, ordering, trials and middleware.
+`Critic.hooks critics inner group` appends repairs in the selected group (by
+default, hypotheses), preserving all existing moves and the consumer's policy,
+ordering, trials and middleware.
 This batch adapter materializes proposals; the producer interface itself can be
 consumed lazily. Custom operations remain available through `Hooks.extraMoves`.
+
+`Critic.hooksFor group factory inner` accepts a factory of type
+`Array (TSyntax term) → Nat → Nat → Array Critic`. Its arguments are the supplied
+rules, current strength and remaining structural depth. The factory is called
+only for the selected group. It can specialize a provider's analysis without
+adding effort accounting or search decisions to the critic itself.
+
+The built-in `Critics.implicitWitnesses constructor` and
+`Critics.fixedIndices major generalize summary` are consumed directly through
+`propose` at their original generation points in `Operations`. The former
+remains in the rules group after ordinary constructors, with cost two. The latter
+remains beside each major premise's ordinary induction alternatives, with cost
+one. This preserves interleaving and action selectors; installing them again
+through hooks would duplicate the proposals. They do not replace the ordinary
+constructor or induction operations.
+
+`Induction.perform goal major reintroduce` executes Lean's ordinary induction
+and reintroduces the caller's dependency closure. It does not select a motive.
+The fixed-index critic owns its abstraction, retained equations and printed
+command; its caller still selects the optional parameters to generalize.
 
 The default provider is `Critics.blockedPremise`: case-split the sole unknown
 premise of an otherwise applicable local rule. The optional

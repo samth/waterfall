@@ -155,4 +155,34 @@ example : True := by
       run_tac discard <| run {effort := 20} #[] rewriteHooks
   trivial
 
+-- Group placement and effort/theory context belong to the adapter, not to
+-- individual critics. Existing extra moves retain their order and selectors.
+example : True := by
+  run_tac
+    let goal ← getMainGoal
+    let rules := #[← `(term| Nat)]
+    let make : Array (TSyntax `term) → Nat → Nat → Array Critic :=
+      fun supplied strength remaining => #[{
+      Evidence := Unit
+      observe := fun _ => do
+        unless supplied.size == 1 && strength == 3 && remaining == 5 do
+          throwError "critic factory lost enumeration context"
+        return #[()]
+      repair := fun _ _ => pure #[{label := "repair", run := pure ()}]}]
+    let inner : Hooks := {extraMoves := fun _ _ _ _ _ => do
+      pure #[{label := "existing", run := pure ()}]}
+    let hooks := Critic.hooksFor .rules make inner
+    let untouched ← hooks.extraMoves goal #[] 0 0 .hypotheses
+    unless untouched.map (·.label) == #["existing"] do
+      throwError "critic escaped its group"
+    let extended ← hooks.extraMoves goal rules 3 5 .rules
+    unless extended.map (·.label) == #["existing", "repair"] do
+      throwError "critic changed the original selectors"
+    let some staticCritic := (make rules 3 5)[0]? | throwError "missing fixture"
+    let staticHooks := Critic.hooks #[staticCritic] inner .forward
+    let forwarded ← staticHooks.extraMoves goal #[] 0 0 .forward
+    unless forwarded.map (·.label) == #["existing", "repair"] do
+      throwError "fixed critic group adapter failed"
+  trivial
+
 end CriticTests
