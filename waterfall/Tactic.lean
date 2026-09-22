@@ -30,7 +30,10 @@ public def Mode.hooks (mode : Mode) (rules : Array (TSyntax `term) := #[]) : Hoo
   match mode with
   | .search => Continuations.hooks rules <| Critics.hooks
       (InductionPlan.hooks
-        (Scheduling.hooks (activate := Scheduling.exposesMoves Critics.propose)))
+        (Scheduling.preparations (RecursionScheduling.hooks (activate := fun goals => do
+          return (← Scheduling.exposesMoves Critics.propose goals) ||
+            (← RecursionScheduling.needsRecursionPrelude goals)))
+          (Scheduling.exposesMoves Critics.propose)))
   | .committed => Critics.hooks (Scheduling.preparations Committed.hooks)
 
 /-- User-facing tactic options. The inherited `Config` fields control resources

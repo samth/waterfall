@@ -133,11 +133,16 @@ selectors. Installing them again through hooks would duplicate proposals.
 
 `Move.generalization : Generalization.Plan` records exact preparation choices:
 
+- `clearBefore`: declarations to try clearing before motive preparation;
+- `clearAfter`: obsolete inputs to try clearing after abstraction;
 - `parameters`: local declarations to revert, including their dependency closure;
 - `abstractions`: expressions and whether to retain each defining equation;
 - `hypotheses`: where to abstract in addition to the target (empty means target only).
 
-The plan refers to the move's input checkpoint. Parameters are reverted before
+The plan refers to the move's input checkpoint. Clearing is speculative context
+strengthening: dependent declarations can prevent it, and every resulting goal
+still needs a proof. The renderer uses the same order of `try clear` commands.
+Parameters are reverted before
 expression abstraction, so abstraction expressions and hypothesis identifiers
 must remain valid after reversion. `Generalization.prepare goal plan` returns
 the prepared goal, the substitution for changed hypotheses, and the complete
@@ -162,7 +167,20 @@ executable closures: extensions must distinguish any other execution choices
 in their metadata before using deduplication. Recorded JSON plans retain action
 selectors rather than checkpoint-local expressions; replay regenerates the moves.
 
-The default provider is `Critics.blockedPremise`: case-split the sole unknown
+`ContinuationCritics` supplies typed providers for conditional fact composition,
+transparent supplied equations, recursive equality orientation, shared recursive
+results, and fixed-parameter induction continuations. Their evidence consists of
+input-local IDs, expressions, syntax, and explicit generalization plans. They are
+consumed at their operation-group insertion points; stronger trials enable the
+additional premise-only and conditional-composition variants.
+`Recursion` shares context/call analysis without choosing a traversal.
+`RecursionScheduling` and `Continuations` select bounded contours independently;
+main's `Scheduling.preparations` middleware still orders contextual preparations.
+The engine limits the whole prelude portfolio to one quarter of effort and caps
+each trial's heartbeat share. `PreludeTrial.tag` is an opaque policy selector,
+carried by `Node.trialTag`; it has no interpretation in the engine.
+
+The default hypothesis provider is `Critics.blockedPremise`: case-split the sole unknown
 premise of an otherwise applicable local rule. The optional
 `Critics.quantifiedRewrite` specializes a quantified equality at a target
 subexpression. It offers

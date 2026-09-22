@@ -1,11 +1,13 @@
 # Functional induction continuations
 
-The experiment's continuation operations now live in `waterfall/Operations.lean`
+The experiment's continuation critics now live in `waterfall/ContinuationCritics.lean`
 and its bounded scheduling policy lives in `waterfall/Continuations.lean`.
 `waterfall (effort := 10000) [definitions, lemmas]` enables the deeper portfolio.
 The old `waterfall_induction` spelling delegates to the integrated search.
 
-The ordinary strength-one operation sequence is preserved. Stronger trials add
+Relative to the pre-rebase prototype, the ordinary strength-one operation sequence
+is preserved. Generalization execution and rendering now share main's explicit
+`Generalization.Plan`; scheduling remains separate from typed repair evidence. Stronger trials add
 fixed-parameter functional induction, speculative pruning of unrelated recursive
 premises, generalization of recursive results shared only among hypotheses, and
 conditional-hypothesis combination with explicit premise obligations.

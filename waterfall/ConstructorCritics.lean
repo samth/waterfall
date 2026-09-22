@@ -38,4 +38,40 @@ public def implicitWitnesses (constructor : Name) : Critic := {
         (← mkConstWithFreshMVarLevels evidence.constructor)
       setGoals (← goal.apply (mkAppN fn xs)) }] }
 
+/-- Traverse constructor fields without descending into unrelated computations. -/
+private partial def constructorFields (e : Expr) : MetaM (Array FVarId) := do
+  if e.isFVar then return #[e.fvarId!]
+  let .const n _ := e.getAppFn | return #[]
+  let some (.ctorInfo _) := (← getEnv).find? n | return #[]
+  e.getAppArgs.foldlM (fun ids arg => return ids ++ (← constructorFields arg)) #[]
+
+/-- Constructor patterns in related arguments expose potential blocked matches. -/
+public def constructorObstructions (calls : Array Expr) : MetaM (Array FVarId × Array FVarId) := do
+  let mut blocked : Array FVarId := #[]
+  let mut fields : Array FVarId := #[]
+  for call in calls do
+    for arg in call.getAppArgs do
+      let .const n _ := arg.getAppFn | continue
+      let some (.ctorInfo _) := (← getEnv).find? n | continue
+      let type ← inferType arg
+      let .const typeName _ := (← whnf type).getAppFn | continue
+      let some (.inductInfo info) := (← getEnv).find? typeName | continue
+      unless info.isRec do continue
+      for other in call.getAppArgs do
+        for id in ← constructorFields other do
+          if ← withoutModifyingState (isDefEq (← id.getDecl).type type) then
+            if other.isFVar then
+              if !blocked.contains id then blocked := blocked.push id
+            else if !fields.contains id then fields := fields.push id
+  return (blocked, fields)
+
+/-- Annotate ordinary case alternatives using observed constructor obstructions.
+No new case executor or traversal is introduced. -/
+public def exposeConstructors (obstructions : Array FVarId × Array FVarId)
+    (major : FVarId) (alternatives : Array Move) : Critic := {
+  Evidence := Name
+  observe := fun _ => pure #[if obstructions.1.contains major then `blockedMatch
+    else if obstructions.2.contains major then `constructorField else .anonymous]
+  repair := fun _ role => pure (alternatives.map fun move => {move with role}) }
+
 end waterfall.Critics

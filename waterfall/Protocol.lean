@@ -120,6 +120,10 @@ Revert parameters first (including dependencies), then abstract expressions in
 the target and the listed hypotheses. An empty hypothesis list means target only.
 These are operational choices, not a serializable search-policy summary. -/
 public structure Generalization.Plan where
+  /-- Speculative weakening of the context before preparing the motive. -/
+  clearBefore : Array FVarId := #[]
+  /-- Try clearing obsolete inputs after expression abstraction. -/
+  clearAfter : Array FVarId := #[]
   parameters : Array FVarId := #[]
   abstractions : Array Generalization.Abstraction := #[]
   hypotheses : Array FVarId := #[]
@@ -254,6 +258,8 @@ public structure Node (σ : Type) where
   jobs : List Job
   state : σ
   origin : TrialOrigin := .fair
+  /-- Opaque policy selector, anonymous for fair trials. -/
+  trialTag : Name := .anonymous
   plan : List (Selection × Tactic.SavedState) := []
 
 /-- Shared analysis for enumerating several candidate families at one focused
@@ -303,9 +309,11 @@ public structure SearchPolicy where
 public def SearchPolicy.default : SearchPolicy := ⟨Unit, (), fun space => space.expand 0 #[] (fun _ => true)⟩
 
 /-- A bounded speculative trial before the ordinary fair schedule. The engine
-also limits `attempts` to one quarter of the effort remaining when this trial
-starts, so a failed trial leaves room for the subsequent schedule. -/
+limits each prelude to one quarter of its starting remaining effort. Each trial
+also receives a proportional share of remaining heartbeats, with a floor of one
+ordinary action slice. Failed speculative work remains charged. -/
 public structure PreludeTrial where
+  tag : Name := .anonymous
   depth : Nat
   strength : Nat := 1
   attempts : Nat := 128

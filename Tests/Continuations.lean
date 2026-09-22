@@ -36,7 +36,19 @@ example (xs : List Nat) (P Q : List Nat → Prop)
     saved.restore true
     let some move := moves.find? (·.label == "generalize recursive results")
       | throwError "missing hypothesis-only generalization"
+    unless move.generalization.abstractions.size == 1 &&
+        move.generalization.abstractions.all (!·.retainEquation) &&
+        !move.generalization.clearAfter.isEmpty do
+      throwError "repair did not retain its exact strengthening plan"
     move.run
+    let expected ← Canonical.snapshot (← getUnsolvedGoals)
+    saved.restore true
+    let commands ← Generalization.commands move.generalization
+    for command in commands do
+      let text := (← PrettyPrinter.ppTactic command).pretty
+      evalTactic (← ofExcept (Parser.runParserCategory (← getEnv) `tactic text))
+    unless (← Canonical.snapshot (← getUnsolvedGoals)) == expected do
+      throwError "strengthening command differs from plan execution"
   exact combine _ h k
 
 -- Conditional combination exposes the unproved premise as a sibling, rather
@@ -88,6 +100,31 @@ example (P : Nat → Prop) (n : Nat) (h : True → P n) : True := by
         throwError "enumeration instantiated a shared argument"
     saved.restore true
   trivial
+
+-- Context pruning is part of the exact plan and its identity, including when
+-- clearing a dependent hypothesis is impossible. Rendering uses the same order.
+example (n : Nat) (h : n = n) : n = n := by
+  run_tac withMainContext do
+    let some h := (← getLCtx).findFromUserName? `h | throwError "missing h"
+    let goal ← getMainGoal
+    let saved ← saveState
+    let plan : Generalization.Plan := {clearBefore := #[h.fvarId]}
+    let result ← Generalization.prepare goal plan
+    setGoals [result.goal]
+    let expected ← Canonical.snapshot (← getUnsolvedGoals)
+    saved.restore true
+    for command in ← Generalization.commands plan do
+      let text := (← PrettyPrinter.ppTactic command).pretty
+      evalTactic (← ofExcept (Parser.runParserCategory (← getEnv) `tactic text))
+    unless (← Canonical.snapshot (← getUnsolvedGoals)) == expected do
+      throwError "context pruning command differs from execution"
+    saved.restore true
+    let move : Move := {label := "same", run := pure ()}
+    let a : InductionPlan.Plan := {move, summary := {}, ordinal := 0}
+    let b := {a with move := {move with generalization := plan}}
+    unless (InductionPlan.deduplicate #[a, b, a]).size == 2 do
+      throwError "different pruning plans were conflated"
+  rfl
 
 -- Recursive removal/permutation fixtures follow the ACL2 sorting definitions:
 -- OathTech/ACL2Lean 5ec2a4b85f87424c86cf434cf7f304498ec9ec6d, Mirrors/Sorting.

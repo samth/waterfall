@@ -240,15 +240,30 @@ public def run (cfg : Config) (rules : Array (TSyntax `term) := #[])
   let start ← IO.getNumHeartbeats
   tryCatchRuntimeEx (hooks.around { phase := .run } (fun _ => { success := some true }) do
     let proveAtDepthAndStrength (trialCfg : Config) (origin : TrialOrigin)
-        (depth strength : Nat) : TacticM Bool := do
+        (depth strength : Nat) (heartbeatBudget? : Option Nat := none)
+        (trialTag : Name := .anonymous) : TacticM Bool := do
       saved.restore true
       stats.modify fun s => { s with depth, strength }
       let root : Node hooks.policy.State := {
         saved, jobs := original.map (Job.mk · depth []),
-        state := hooks.policy.initial, origin }
+        state := hooks.policy.initial, origin, trialTag }
       let win ← IO.mkRef []
-      let ok ← hooks.bool { phase := .trial, depth, strength }
+      let search := hooks.bool { phase := .trial, depth, strength }
         (proveAll trialCfg stats hooks rules root root win)
+      let ok ← match heartbeatBudget? with
+        | none => search
+        | some requested => do
+          let ctx ← readThe Core.Context
+          let now ← IO.getNumHeartbeats
+          let cap := if ctx.maxHeartbeats == 0 then requested
+            else min requested (ctx.initHeartbeats + ctx.maxHeartbeats - now)
+          if cap == 0 then pure false else
+            tryCatchRuntimeEx (do
+              let ok ← withTheReader Core.Context
+                (fun c => { c with initHeartbeats := now, maxHeartbeats := cap }) search
+              return ok && (← IO.getNumHeartbeats) - now <= cap) fun ex => do
+                if ex.isInterrupt || !ex.isRuntime then throw ex
+                return false
       if ok then
         for (selection, snapshot) in ← win.get do
           hooks.accepted selection snapshot
@@ -265,7 +280,17 @@ public def run (cfg : Config) (rules : Array (TSyntax `term) := #[])
       let allowance := min trial.attempts ((cfg.effort - spent) / 4)
       if allowance == 0 then continue
       let trialCfg := { cfg with effort := min cfg.effort (spent + allowance) }
-      if ← proveAtDepthAndStrength trialCfg .prelude trial.depth trial.strength then success := true
+      -- Speculation receives the same share of remaining heartbeats as of
+      -- effort, with room for one ordinary action slice. Cap the entire trial,
+      -- including proposal generation. Failed trial work remains charged globally.
+      let ctx ← readThe Core.Context
+      let now ← IO.getNumHeartbeats
+      let remaining := ctx.initHeartbeats + ctx.maxHeartbeats - now
+      let cap := if ctx.maxHeartbeats == 0 then cfg.attemptHeartbeats * allowance
+        else min remaining (max cfg.attemptHeartbeats (remaining * allowance / cfg.effort))
+      if cap == 0 then continue
+      let ok ← proveAtDepthAndStrength trialCfg .prelude trial.depth trial.strength (some cap) trial.tag
+      if ok then success := true
     -- One policy enumerates the entire run. Every trial spends the same global
     -- allowance; neither a new round nor a failed branch refunds earlier work.
     -- A fair policy visits every finite (depth, positive strength) pair as the

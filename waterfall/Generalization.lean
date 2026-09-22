@@ -18,20 +18,32 @@ public structure Prepared where
 /-- Execute a selected plan without choosing a strategy or an induction scheme.
 The caller owns rollback, as for any other proof operation. -/
 public def prepare (goal : MVarId) (plan : Plan) : MetaM Prepared := goal.withContext do
-  let (reverted, goal) ← goal.revert plan.parameters
-  if plan.abstractions.isEmpty then return {goal, reverted, substitution := {}}
-  goal.withContext do
-    let args ← plan.abstractions.mapM fun abstraction => do
+  let mut initial := goal
+  for id in plan.clearBefore do initial ← initial.tryClear id
+  let (reverted, goal) ← initial.revert plan.parameters
+  let prepared ← if plan.abstractions.isEmpty then
+    pure ({goal, reverted, substitution := {}} : Prepared)
+  else goal.withContext do
+    let args ← plan.abstractions.mapIdxM fun i abstraction => do
       let hName? ← if abstraction.retainEquation then
         pure (some (← mkFreshUserName `index_eq)) else pure none
-      pure ({expr := abstraction.expression, hName?} : GeneralizeArg)
+      let xName := (← getLCtx).getUnusedName (Name.mkSimple s!"wf_index{i}")
+      pure ({expr := abstraction.expression, hName?, xName? := some xName} : GeneralizeArg)
     let (substitution, _, goal) ← goal.generalizeHyp args plan.hypotheses
     return {goal, substitution, reverted}
+  let mut result := prepared.goal
+  for id in plan.clearAfter do
+    let mapped := prepared.substitution.apply (mkFVar id)
+    if mapped.isFVar then result ← result.tryClear mapped.fvarId!
+  return {prepared with goal := result}
 
 /-- Render precisely the selected preparation in its input context. The consumer
 adds the continuation and independently checks the complete printed proof. -/
 public def commands (plan : Plan) : TacticM (Array (TSyntax `tactic)) := do
   let mut out := #[]
+  for id in plan.clearBefore do
+    let name := mkIdent (← id.getDecl).userName
+    out := out.push (← `(tactic| try clear $name:ident))
   unless plan.parameters.isEmpty do
     let names ← plan.parameters.mapM fun id => return mkIdent (← id.getDecl).userName
     out := out.push (← `(tactic| revert $names*))
@@ -49,6 +61,9 @@ public def commands (plan : Plan) : TacticM (Array (TSyntax `tactic)) := do
     let hypotheses ← plan.hypotheses.mapM fun id => return mkIdent (← id.getDecl).userName
     out := out.push (← if hypotheses.isEmpty then `(tactic| generalize $args,*)
       else `(tactic| generalize $args,* at $hypotheses* ⊢))
+  for id in plan.clearAfter do
+    let name := mkIdent (← id.getDecl).userName
+    out := out.push (← `(tactic| try clear $name:ident))
   return out
 
 end waterfall.Generalization

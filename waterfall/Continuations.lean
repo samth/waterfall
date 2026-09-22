@@ -1,5 +1,5 @@
 module
-public import waterfall.Scheduling
+public import waterfall.RecursionScheduling
 
 meta section
 

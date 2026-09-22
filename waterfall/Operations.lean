@@ -2,7 +2,7 @@ module
 public import waterfall.Execution
 public import waterfall.InductionPlan
 public import waterfall.ConstructorCritics
-public import waterfall.InductionCritics
+public import waterfall.ContinuationCritics
 public meta import Lean.Elab.Tactic.Induction
 public meta import Lean.Elab.Tactic.Grind.Main
 public meta import Lean.Meta.Tactic.Grind.Types
@@ -40,78 +40,10 @@ namespace waterfall
 private def tacticMove (label : String) (stx : TSyntax `tactic) : Move :=
   { cost := 1, label := label, command? := some stx, run := evalTactic stx }
 
-/-- Only definitions originating in the current module are unfolded implicitly.
-Imported theories can supply their definitions and laws through the rule list.
-Inspect async metadata first; never wait for the current theorem's proof body.
--/
-private def goalDefinitions (g : MVarId) : MetaM (Array Name) := g.withContext do
-  let env ← getEnv
-  let mut names : Array Name := #[]
-  let mut exprs := #[(← instantiateMVars (← g.getType))]
-  for d in (← getLCtx) do
-    if !d.isImplementationDetail then exprs := exprs.push d.type
-  for e in exprs do
-    for n in e.getUsedConstants do
-      if !names.contains n && !env.isImportedConst n then
-        if let some c := env.findAsync? n then
-          -- Reducible aliases are unfolded by Lean already; grind rejects
-          -- them as explicit theorem arguments.
-          if c.kind == .defn && (← getReducibilityStatus n) != .reducible then
-            names := names.push n
-  return names
+open Recursion
 
 private def terms (names : Array Name) : Array (TSyntax `term) :=
   names.map fun n => ⟨mkIdent n⟩
-
--- Forward instantiation draws arguments from terms already present in the goal
--- and hypotheses. Bound-variable fragments cannot be reused outside their binder.
-private structure TermCollection where
-  seen : Std.HashSet Expr := {}
-  terms : Array Expr := #[]
-
-private partial def collectTerm (e : Expr) (collection : TermCollection) : TermCollection :=
-  if collection.seen.contains e then collection else
-  let collection := {
-    seen := collection.seen.insert e
-    terms := if e.hasLooseBVars then collection.terms else collection.terms.push e }
-  match e with
-  | .forallE _ domain body _ | .lam _ domain body _ =>
-      collectTerm body (collectTerm domain collection)
-  | .letE _ type value body _ =>
-      collectTerm body (collectTerm value (collectTerm type collection))
-  | .app fn arg => collectTerm arg (collectTerm fn collection)
-  | .mdata _ body | .proj _ _ body => collectTerm body collection
-  | _ => collection
-
-private partial def collectApplication (e : Expr)
-    (collection : TermCollection) : TermCollection :=
-  if collection.seen.contains e then collection else
-  let collection := {
-    seen := collection.seen.insert e
-    terms := if e.isApp && !e.hasLooseBVars then collection.terms.push e else collection.terms }
-  match e with
-  | .forallE _ domain body _ | .lam _ domain body _ =>
-      collectApplication body (collectApplication domain collection)
-  | .letE _ type value body _ =>
-      collectApplication body (collectApplication value (collectApplication type collection))
-  | .app fn arg => collectApplication arg (collectApplication fn collection)
-  | .mdata _ body | .proj _ _ body => collectApplication body collection
-  | _ => collection
-
-private def contextTerms (g : MVarId) : MetaM (Array Expr) := g.withContext do
-  let mut collection := collectTerm (← instantiateMVars (← g.getType)) {}
-  for d in (← getLCtx) do
-    unless d.isImplementationDetail do
-      collection := collectTerm (← instantiateMVars d.type) collection
-      collection := { collection with terms := collection.terms.push (mkFVar d.fvarId) }
-  return collection.terms
-
-private def contextApplications (g : MVarId) : MetaM (Array Expr) := g.withContext do
-  let mut collection := collectApplication (← instantiateMVars (← g.getType)) {}
-  for d in (← getLCtx) do
-    unless d.isImplementationDetail do
-      collection := collectApplication (← instantiateMVars d.type) collection
-  return collection.terms
 
 /-- Shared simplifier configuration. Closing requires `done`; normalization
 leaves its changed obligations available to the continuation. -/
@@ -124,6 +56,7 @@ private def simplification (rules : Array (TSyntax `term)) (strength : Nat) : Ta
 /-- The leaves delegate inference to Lean. Progressing normalization and case
 analysis are separate moves, so a destructive normalization can be undone.
 -/
+
 private def closeGoal (rules : Array (TSyntax `term)) (strength : Nat) :
     TacticM (Array Move) := do
   -- Scale the leaf solver's own limits as well as its surrounding heartbeat
@@ -247,7 +180,8 @@ private def analyzeHypotheses (g : MVarId) : TacticM (Array Move) := do
       let ty ← whnf d.type
       if let .const n _ := ty.getAppFn then
         if let some (.inductInfo info) := (← getEnv).find? n then
-          out := out ++ (← caseAlternatives g d.fvarId ty info.isRec "cases hypothesis")
+          out := out ++ (← caseAlternatives g d.fvarId ty info.isRec "cases hypothesis").map
+            (fun m => if ty.isAppOf ``And then {m with role := `conjunction} else m)
   return out
 
 /-- Reason backward using local hypotheses, supplied rules, and target constructors. -/
@@ -273,7 +207,7 @@ private def applyRules (g : MVarId) (rules : Array (TSyntax `term)) (maxCost : N
   if let .const n _ := ty.getAppFn then
     if let some (.inductInfo info) := (← getEnv).find? n then
       for ctor in info.ctors do
-        out := out.push { cost := 1, label := s!"constructor {ctor}", run := do
+        out := out.push { cost := 1, role := `targetConstructor, label := s!"constructor {ctor}", run := do
           setGoals (← g.apply (← mkConstWithFreshMVarLevels ctor)) }
       if maxCost >= 2 then
         for ctor in info.ctors do
@@ -346,37 +280,7 @@ private def instantiateHypotheses (g : MVarId) (strength : Nat) : TacticM (Array
 /-- Offer functional induction and case analysis for calls in the conjecture. -/
 private def followRecursion (g : MVarId) (rules : Array (TSyntax `term)) : TacticM (Array Move) := do
   let mut out : Array Move := #[]
-  let ts ← contextTerms g
-  -- Functional induction/cases follow the recursion of calls occurring in the
-  -- current problem. An explicit definition rule may expose imported recursion.
-  let mut definitions ← goalDefinitions g
-  for r in rules do
-    if !r.raw.isIdent then continue
-    let some n ← (try pure (some (← resolveGlobalConstNoOverload r)) catch _ => pure none)
-      | continue
-    if let some info := (← getEnv).findAsync? n then
-      if info.kind == .defn && !definitions.contains n then
-        definitions := definitions.push n
-  let calls ← ts.filterM fun call => do
-    let .const n _ := call.getAppFn | return false
-    if !call.isApp || !definitions.contains n then return false
-    return !(← whnf (← inferType call)).isForall
-  -- Prefer computation calls before predicates, but retain both in the search.
-  -- A call whose result is still a function is not a complete elimination target.
-  let dataCalls ← calls.filterM fun c => return !(← isProp c)
-  let propCalls ← calls.filterM fun c => isProp c
-  for call in dataCalls ++ propCalls do
-    let definition := match call.getAppFn with | .const n _ => some n | _ => none
-    let related := calls.filter fun other => other.getAppFn == call.getAppFn
-    let args := call.getAppArgs
-    let mut changingArguments := #[]
-    for i in [:args.size] do
-      if related.any (fun other =>
-          let otherArgs := other.getAppArgs
-          i < otherArgs.size && otherArgs[i]! != args[i]!) then
-        changingArguments := changingArguments.push i
-    let summary : InductionSummary := {
-      definition, coveredCalls := related.size, changingArguments }
+  for (call, summary) in ← Recursion.calls g rules do
     out := out ++ (← ((Critics.functionalInduction call summary).propose g).collect)
     -- Cases retain the current assumptions; there is no motive to strengthen.
     out := out.push {
@@ -392,6 +296,7 @@ private def inductOrAnalyzeData (g : MVarId) : TacticM (Array Move) := do
   let mut out : Array Move := #[]
   let lctx ← getLCtx
   let calls ← contextApplications g
+  let exposed ← Critics.constructorObstructions calls
   for d in lctx do
     if d.isImplementationDetail then continue
     let ty ← whnf d.type
@@ -413,7 +318,8 @@ private def inductOrAnalyzeData (g : MVarId) : TacticM (Array Move) := do
     -- Noninductive case analysis is another alternative, useful for tests and
     -- discriminants where induction would introduce irrelevant hypotheses.
     if !(← isProp d.type) then
-      out := out ++ (← caseAlternatives g d.fvarId ty info.isRec s!"cases {d.userName}")
+      let cases ← caseAlternatives g d.fvarId ty info.isRec s!"cases {d.userName}"
+      out := out ++ (← ((Critics.exposeConstructors exposed d.fvarId cases).propose g).collect)
   return out
 
 /-- Generating one group never requires enumerating a later group. Values captured
@@ -422,12 +328,24 @@ public def movesFor (g : MVarId) (rules : Array (TSyntax `term)) (strength remai
     (group : Group) : TacticM (Array Move) := do
   let moves ← match group with
   | .close => closeGoal rules strength
-  | .basic => g.withContext <| prepareGoal g rules strength
+  | .basic => g.withContext do
+      let preparation ← prepareGoal g rules strength
+      return preparation.filter (·.preparation != .targetSplit) ++
+        (← ((Critics.transparentRules rules).propose g).collect) ++
+        (← ((Critics.recursiveEquality rules).propose g).collect) ++
+        (← ((Critics.sharedResults rules (strength > 1)).propose g).collect) ++
+        preparation.filter (·.preparation == .targetSplit)
   | .hypotheses => g.withContext <| analyzeHypotheses g
   | .rules => g.withContext <| applyRules g rules remaining
   | .library => g.withContext <| applyLibraryTheorems g remaining
-  | .forward => g.withContext <| instantiateHypotheses g strength
-  | .functions => g.withContext <| followRecursion g rules
+  | .forward => g.withContext do
+      let repairs ← if strength > 1 then Critics.conditionalFacts.propose g |>.collect else pure #[]
+      return repairs ++ (← instantiateHypotheses g strength)
+  | .functions => g.withContext do
+      let ordinary ← followRecursion g rules
+      let repairs ← if strength > 1 then
+        (Critics.inductionContinuations rules).propose g |>.collect else pure #[]
+      return ordinary ++ repairs
   | .induction => g.withContext <| inductOrAnalyzeData g
   return moves.map fun move => { move with checkLocalChange := true }
 
