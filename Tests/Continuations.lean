@@ -126,6 +126,34 @@ example (n : Nat) (h : n = n) : n = n := by
       throwError "different pruning plans were conflated"
   rfl
 
+-- Clearing a name collision must not make execution choose another abstraction
+-- name than the renderer, which starts from the original checkpoint.
+set_option linter.unusedVariables false in
+example (wf_index0 n : Nat) (h : n.succ > 0) : n.succ > 0 := by
+  run_tac withMainContext do
+    let ctx ← getLCtx
+    let id := fun name => (ctx.findFromUserName? name).get!.fvarId
+    let expression ← mkAppM ``Nat.succ #[mkFVar (id `n)]
+    let plan : Generalization.Plan := {
+      clearBefore := #[id `wf_index0]
+      abstractions := #[{expression, retainEquation := false}]
+      hypotheses := #[id `h] }
+    let saved ← saveState
+    let prepared ← Generalization.prepare (← getMainGoal) plan
+    setGoals [prepared.goal]
+    let expected ← Canonical.snapshot (← getUnsolvedGoals)
+    let names ← (← getMainGoal).withContext do
+      return (← getLCtx).foldl (init := #[]) fun names d => names.push d.userName
+    saved.restore true
+    for command in ← Generalization.commands plan do
+      let text := (← PrettyPrinter.ppTactic command).pretty
+      evalTactic (← ofExcept (Parser.runParserCategory (← getEnv) `tactic text))
+    let actualNames ← (← getMainGoal).withContext do
+      return (← getLCtx).foldl (init := #[]) fun names d => names.push d.userName
+    unless (← Canonical.snapshot (← getUnsolvedGoals)) == expected && names == actualNames do
+      throwError "clearing a collision changed abstraction names or scope"
+  assumption
+
 -- Recursive removal/permutation fixtures follow the ACL2 sorting definitions:
 -- OathTech/ACL2Lean 5ec2a4b85f87424c86cf434cf7f304498ec9ec6d, Mirrors/Sorting.
 -- Source-specific laws are explicit hypotheses, never globally assumed facts.

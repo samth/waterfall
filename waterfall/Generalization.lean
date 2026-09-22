@@ -18,6 +18,11 @@ public structure Prepared where
 /-- Execute a selected plan without choosing a strategy or an induction scheme.
 The caller owns rollback, as for any other proof operation. -/
 public def prepare (goal : MVarId) (plan : Plan) : MetaM Prepared := goal.withContext do
+  -- Allocate display names in the input context, just like commands. Clearing
+  -- or reverting a same-named local must not change the abstraction recipe.
+  let lctx ← getLCtx
+  let names := plan.abstractions.mapIdx fun i _ =>
+    lctx.getUnusedName (Name.mkSimple s!"wf_index{i}")
   let mut initial := goal
   for id in plan.clearBefore do initial ← initial.tryClear id
   let (reverted, goal) ← initial.revert plan.parameters
@@ -27,7 +32,7 @@ public def prepare (goal : MVarId) (plan : Plan) : MetaM Prepared := goal.withCo
     let args ← plan.abstractions.mapIdxM fun i abstraction => do
       let hName? ← if abstraction.retainEquation then
         pure (some (← mkFreshUserName `index_eq)) else pure none
-      let xName := (← getLCtx).getUnusedName (Name.mkSimple s!"wf_index{i}")
+      let xName := names[i]!
       pure ({expr := abstraction.expression, hName?, xName? := some xName} : GeneralizeArg)
     let (substitution, _, goal) ← goal.generalizeHyp args plan.hypotheses
     return {goal, substitution, reverted}
