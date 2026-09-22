@@ -133,6 +133,14 @@ and reintroduces the caller's dependency closure. It does not select a motive.
 The fixed-index critic owns its abstraction, retained equations and printed
 command; its caller still selects the optional parameters to generalize.
 
+Generalization extensions must retain their actual parameter choices. The
+existing motive enum and induction summary record a kind and a count, not a
+complete preparation plan. A narrower selector should supply its own command
+rather than rely on the ordinary renderer's broad reversion recipe. Likewise,
+`InductionPlan.equivalent` is not a general equality test for arbitrary move
+closures: different selections can share its current metadata. Such extensions
+must distinguish their execution-relevant plans before using deduplication.
+
 The default provider is `Critics.blockedPremise`: case-split the sole unknown
 premise of an otherwise applicable local rule. The optional
 `Critics.quantifiedRewrite` specializes a quantified equality at a target
