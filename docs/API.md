@@ -119,9 +119,13 @@ proof commands for checked suggestions; neither controls search or commitment.
 `Scheduling.exposesMoves producer` performs read-only lookahead after root
 introductions. Search mode uses it with `Critics.propose` to decide whether to
 request a bounded preparation trial. Any move producer can supply this lookahead.
-`Scheduling.choose` puts preparatory moves ahead of expensive closers in that
-trial, using typed metadata, then retains all remaining stages. Committed mode
-uses the same repair providers with its own existing traversal.
+`Scheduling.preparations` orders contextual repairs first within a batch and
+prefers bulk introduction only when the supplied lookahead exposes a repair.
+This ordering also applies in ordinary search; eager introduction elsewhere can
+hide a useful whole-goal rule. `Scheduling.choose` separately places preparation
+before expensive closers in the bounded trial, retaining all remaining stages.
+Committed mode uses the same repair providers and contextual preparation ordering
+with its own existing traversal.
 
 An observer calls its continuation once and leaves proof state alone. Resource
 control middleware can reduce allowances or abort spans. The engine owns proof

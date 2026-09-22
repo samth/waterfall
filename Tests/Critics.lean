@@ -128,6 +128,24 @@ example (f : Nat → Nat) (k : Nat) (h : ∀ a, f a = a) :
     let hooks := Critic.hooks #[Critics.quantifiedRewrite] { Committed.hooks with policy }
     discard <| run {effort := 30} #[] hooks
 
+-- Preparation lookahead also guides ordinary ordering. This abstract semantic
+-- rule needs a repair before introducing away the rule's matching conclusion;
+-- indiscriminate bulk introduction lost the corresponding SF Hoare proof.
+private abbrev Triple {S C : Type} (eval : C → S → S → Prop)
+    (P : S → Prop) (c : C) (Q : S → Prop) := ∀ s t, eval c s t → P s → Q t
+
+example {S C B : Type} (eval : C → S → S → Prop)
+    (loop : C → B → C) (guard : S → B → Bool) :
+    (∀ P Q b c, Triple eval P c Q →
+      Triple eval (fun s => Q s ∧ guard s b = false) c Q →
+      Triple eval P (loop c b) (fun s => Q s ∧ guard s b = true)) →
+    (∀ P b c, Triple eval P c P →
+      Triple eval P (loop c b) (fun s => P s ∧ guard s b = true)) := by
+  run_tac
+    let stats ← run {effort := 1000} #[] Mode.search.hooks
+    unless stats.choices.contains "split blocked rule premise" do
+      throwError "preparation ordering failed to retain the semantic-rule repair"
+
 -- An unprovable condition must remain an unprovable sibling, including after
 -- the rewritten main goal has closed. No partial proof can count as success.
 example : True := by

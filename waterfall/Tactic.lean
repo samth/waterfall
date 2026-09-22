@@ -29,7 +29,7 @@ public def Mode.hooks : Mode → Hooks
   | .search => Critics.hooks
       (InductionPlan.hooks
         (Scheduling.hooks (activate := Scheduling.exposesMoves Critics.propose)))
-  | .committed => Critics.hooks Committed.hooks
+  | .committed => Critics.hooks (Scheduling.preparations Committed.hooks)
 
 /-- User-facing tactic options. The inherited `Config` fields control resources
 and enumeration. For custom search, ordering, costs and observation, adapt

@@ -52,7 +52,7 @@ run_cmd do
       `waterfall.InductionPlan.dominates,
       `waterfall.InductionPlan.hooks,
       `waterfall.Scheduling.State, `waterfall.Scheduling.depthForEffort,
-      `waterfall.Scheduling.choose, `waterfall.Scheduling.exposesMoves, `waterfall.Scheduling.hooks,
+      `waterfall.Scheduling.preparations, `waterfall.Scheduling.choose, `waterfall.Scheduling.exposesMoves, `waterfall.Scheduling.hooks,
       `waterfall.attempt, `waterfall.prepareProposals, `waterfall.proposePrepared,
       `waterfall.propose, `waterfall.executeProposal,
       `waterfall.expand, `waterfall.checkComplete,

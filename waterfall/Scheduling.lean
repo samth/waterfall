@@ -40,14 +40,8 @@ public def choose (space : Space State) : Choices (Node State) := fun visit => d
   if ← tryStage space prepared #[.close]
       (fun c => c.move.closure != .simplification &&
         c.move.closure != .saturation) visit then return true
-  -- Introduce a quantified goal as a whole before spending structural depth
-  -- on its body. This is independent of any particular repair provider.
-  if ← tryStage space prepared #[.basic]
-      (fun c => c.move.preparation == .allBinders) visit then return true
-  if ← tryStage space prepared #[.hypotheses]
-      (fun c => c.move.preparation != .none) visit then return true
-  if ← tryStage space prepared #[.basic]
-      (fun c => c.move.preparation != .allBinders) visit then return true
+  if ← tryStage space prepared #[.basic, .hypotheses]
+      (fun c => c.action.group == .basic || c.move.preparation != .none) visit then return true
   let inductions ← (space.propose prepared #[#[.induction]]
     (fun c => c.move.induction != .none)).collect
   let dominant := inductions.any fun a =>
@@ -82,8 +76,33 @@ public def exposesMoves (propose : MVarId → Choices Move)
     return false
   finally saved.restore true
 
+/-- Prefer contextual preparation over ordinary operations in a batch. Bulk
+introduction gets priority only when the supplied lookahead exposes useful work.
+This is ordering middleware, independent of the move producer and traversal. -/
+public def preparations (inner : Hooks := {})
+    (exposes : List MVarId → TacticM Bool := fun _ => pure false) : Hooks := { inner with
+  order := fun goal span candidates => do
+    let requested ← inner.order goal span candidates
+    let ordered ← match requested with
+      | none => pure candidates
+      | some actions => actions.mapM fun action => do
+          let some candidate := candidates.find? (·.action == action)
+            | throwError "preparation ordering received an unknown action"
+          return candidate
+    let preparatory := fun c : Candidate =>
+      c.action.group == .hypotheses && c.move.preparation != .none
+    let repairs := ordered.filter preparatory
+    let others := ordered.filter (fun c => !preparatory c)
+    let bulkFirst ← if others.any (·.move.preparation == .allBinders) then
+      exposes [goal] else pure false
+    let others := if bulkFirst then
+      others.filter (·.move.preparation == .allBinders) ++
+        others.filter (·.move.preparation != .allBinders)
+      else others
+    return some ((repairs ++ others).map (·.action)) }
+
 public def hooks (inner : Hooks := {})
-    (activate : List MVarId → TacticM Bool := fun _ => pure true) : Hooks := { inner with
+    (activate : List MVarId → TacticM Bool := fun _ => pure true) : Hooks := preparations { inner with
   policy := ⟨State, (), fun space =>
     if space.root.origin == .prelude then
       choose space
@@ -95,6 +114,6 @@ public def hooks (inner : Hooks := {})
     let scheduled := if ← activate goals then
       #[{ depth := depthForEffort cfg.effort, attempts := 64 }] else #[]
     return scheduled ++ (← inner.prelude cfg goals)
-}
+} activate
 
 end waterfall.Scheduling
