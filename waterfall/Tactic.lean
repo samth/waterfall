@@ -3,6 +3,7 @@ public import waterfall.Parallel
 public import waterfall.Committed
 public import waterfall.Critics
 public import waterfall.Scheduling
+public import waterfall.Continuations
 public import waterfall.Suggestions
 
 meta section
@@ -25,8 +26,9 @@ public inductive Mode where
   deriving Inhabited, BEq, Repr
 
 /-- The standard callbacks for a mode, available for programmatic adaptation. -/
-public def Mode.hooks : Mode → Hooks
-  | .search => Critics.hooks
+public def Mode.hooks (mode : Mode) (rules : Array (TSyntax `term) := #[]) : Hooks :=
+  match mode with
+  | .search => Continuations.hooks rules <| Critics.hooks
       (InductionPlan.hooks
         (Scheduling.hooks (activate := Scheduling.exposesMoves Critics.propose)))
   | .committed => Critics.hooks (Scheduling.preparations Committed.hooks)
@@ -60,7 +62,7 @@ proof commands. Use `(report := true)` to also print search statistics. -/
 syntax (name := waterfallReportTac) "waterfall?" optConfig (" [" term,* "]")? : tactic
 
 private def execute (options : Options) (rules : Array (TSyntax `term)) : TacticM Unit := do
-  discard <| Parallel.run options.cpus options.toConfig rules (fun use => use options.mode.hooks)
+  discard <| Parallel.run options.cpus options.toConfig rules (fun use => use (options.mode.hooks rules))
 
 elab_rules : tactic
   | `(tactic| waterfall $cfg:optConfig $[[$rules,*]]?) => do
@@ -70,6 +72,6 @@ elab_rules : tactic
     let rules := rules.map (·.getElems) |>.getD #[]
     let ref ← getRef
     discard <| Parallel.run options.cpus options.toConfig rules
-      (Suggestions.run ref rules options.mode.hooks)
+      (Suggestions.run ref rules (options.mode.hooks rules))
 
 end waterfall

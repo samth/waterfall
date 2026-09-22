@@ -97,8 +97,8 @@ private def command (step : Selection) (rules : Array (TSyntax `term)) (hooks : 
     let term ← PrettyPrinter.delab proof
     let name := mkIdent ((← getLCtx).getUnusedName `derived)
     `(tactic| have $name:ident := $term)
-  | "grind" => grindCommand rules step.strength false
-  | "grind constructors" => grindCommand rules step.strength true
+  | "grind" => grindCommand rules (if move.role == `continuationClose then 1 else step.strength) false
+  | "grind constructors" => grindCommand rules (if move.role == `continuationClose then 1 else step.strength) true
   | "intro" => `(tactic| intro _)
   | "introduce binders" => `(tactic| intros)
   | "function extensionality" => `(tactic| (apply funext; intros))
