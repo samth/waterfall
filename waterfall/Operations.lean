@@ -377,25 +377,14 @@ private def followRecursion (g : MVarId) (rules : Array (TSyntax `term)) : Tacti
         changingArguments := changingArguments.push i
     let summary : InductionSummary := {
       definition, coveredCalls := related.size, changingArguments }
-    for casesOnly in [false, true] do
-      out := out.push {
-        cost := 1, subject := some call,
-        induction := if casesOnly then .none else .functional,
-        inductionSummary := if casesOnly then none else some summary,
-        label := if casesOnly then "function cases" else "function induction", run := g.withContext do
-          let mut others := #[]
-          for d in (← getLCtx) do
-            unless d.isImplementationDetail || call.containsFVar d.fvarId ||
-                (← isProp d.type) || (← isType (mkFVar d.fvarId)) do
-              others := others.push d.fvarId
-          -- Cases need the current assumptions, not a generalized motive.
-          let (_, goal) ← g.revert (if casesOnly then #[] else others)
-          setGoals [goal]
-          -- exprToSyntax can allocate elaborator holes: create them only here,
-          -- after this alternative's snapshot has been restored.
-          let t ← goal.withContext <| Term.exprToSyntax call
-          evalTactic (← if casesOnly then `(tactic| fun_cases $t)
-            else `(tactic| fun_induction $t)) }
+    out := out ++ (← ((Critics.functionalInduction call summary).propose g).collect)
+    -- Cases retain the current assumptions; there is no motive to strengthen.
+    out := out.push {
+      cost := 1, subject := some call, label := "function cases", run := g.withContext do
+        let (_, goal) ← g.revert #[]
+        setGoals [goal]
+        let t ← goal.withContext <| Term.exprToSyntax call
+        evalTactic (← `(tactic| fun_cases $t)) }
   return out
 
 /-- Induct on data or evidence, varying the motive; also retain ordinary data cases. -/
@@ -409,7 +398,6 @@ private def inductOrAnalyzeData (g : MVarId) : TacticM (Array Move) := do
     let .const n _ := ty.getAppFn | continue
     let some (.inductInfo info) := (← getEnv).find? n | continue
     if info.isRec || (← customElim? d.fvarId true).isSome then
-      let kind : InductionKind := if (← isProp d.type) then .evidence else .data
       let covered := calls.filter fun call => call.isApp && call.containsFVar d.fvarId
       let mut changingArguments := #[]
       for call in covered do
@@ -417,40 +405,11 @@ private def inductOrAnalyzeData (g : MVarId) : TacticM (Array Move) := do
           if call.getAppArgs[i]!.containsFVar d.fvarId &&
               !changingArguments.contains i then
             changingArguments := changingArguments.push i
-      -- Generalize data not occurring in the major premise's type. Lean's
-      -- revert closes over dependencies and builds the quantified motive.
-      let mut others : Array FVarId := #[]
-      for other in lctx do
-        if other.isImplementationDetail || other.fvarId == d.fvarId then continue
-        if !(← isProp other.type) && !(← isType (mkFVar other.fvarId)) &&
-            !d.type.containsFVar other.fvarId then
-          others := others.push other.fvarId
-      let inductWithParameters (variables : Array FVarId) : TacticM Unit := do
-        let (reverted, goal) ← g.revert variables
-        Induction.perform goal (mkFVar d.fvarId) reverted.size
       let summary : InductionSummary := {
         coveredCalls := covered.size,
         changingArguments,
         expectedCases := info.ctors.length }
-      if !others.isEmpty then
-        out := out.push {
-          cost := 1
-          induction := kind
-          major := some d.fvarId
-          inductionSummary := some {summary with generalized := others.size}
-          label := s!"induction {d.userName} generalized"
-          run := inductWithParameters others
-          motive := InductionMotive.localGeneralization }
-      out := out.push {
-        cost := 1
-        induction := kind
-        major := some d.fvarId
-        inductionSummary := some summary
-        label := s!"induction {d.userName}"
-        run := inductWithParameters #[] }
-      -- Repairs remain adjacent to their major premise's ordinary schemes.
-      -- Appending them in a later global batch would change search and replay.
-      out := out ++ (← ((Critics.fixedIndices d.fvarId others summary).propose g).collect)
+      out := out ++ (← ((Critics.inductionMotives d.fvarId summary).propose g).collect)
     -- Noninductive case analysis is another alternative, useful for tests and
     -- discriminants where induction would introduce irrelevant hypotheses.
     if !(← isProp d.type) then

@@ -61,33 +61,7 @@ private def functionalCommand (move : Move) : TacticM (TSyntax `tactic) := do
   let some call := move.subject | throwError "missing functional elimination subject"
   let target ← PrettyPrinter.delab call
   if move.induction == .none then return ← `(tactic| fun_cases $target)
-  let mut others : Array (TSyntax `ident) := #[]
-  for d in (← getLCtx) do
-    unless d.isImplementationDetail || call.containsFVar d.fvarId ||
-        (← isProp d.type) || (← isType (mkFVar d.fvarId)) do
-      others := others.push (mkIdent d.userName)
-  let tactic ← `(tactic| fun_induction $target)
-  if others.isEmpty then return tactic
-  `(tactic| (revert $others*; $tactic))
-
-/-- Ordinary induction and parameter reversion. Specialized motive repairs
-supply their own checked commands through `Move.command?`. -/
-private def inductionCommand (step : Selection) (major : FVarId) :
-    TacticM (TSyntax `tactic) := do
-  let target := mkIdent (← major.getDecl).userName
-  let declaredType ← inferType (mkFVar major)
-  let mut commands := #[]
-  let generalized := step.motive == InductionMotive.localGeneralization
-  if generalized then
-    let mut others : Array (TSyntax `ident) := #[]
-    for d in (← getLCtx) do
-      unless d.isImplementationDetail || d.fvarId == major ||
-          (← isProp d.type) || (← isType (mkFVar d.fvarId)) || declaredType.containsFVar d.fvarId do
-        others := others.push (mkIdent d.userName)
-    unless others.isEmpty do commands := commands.push (← `(tactic| revert $others*))
-  let induction ← `(tactic| induction $target:ident)
-  let induction ← if generalized then `(tactic| $induction <;> intros) else pure induction
-  sequence (commands.push induction)
+  Induction.command call move.generalization true
 
 /-- Render the common proof vocabulary. Display labels only select proposed
 recipes; they are never trusted as replay identifiers or evidence of correctness.
@@ -105,7 +79,8 @@ private def command (step : Selection) (rules : Array (TSyntax `term)) (hooks : 
     -- In particular, a closing `done` must not inspect those pending siblings.
     if step.action.group == .close then return ← `(tactic| focus ($command:tactic))
     return command
-  if step.action.group == .functions then return ← functionalCommand move
+  if step.action.group == .functions || move.induction == .functional then
+    return ← functionalCommand move
   -- Resolve constructor names from the target's declaration, avoiding parsing
   -- a display name back into a Lean identifier (which can contain quoted dots).
   let type ← whnf (← g.getType)
@@ -135,7 +110,7 @@ private def command (step : Selection) (rules : Array (TSyntax `term)) (hooks : 
       else
         `(tactic| set_option tactic.customEliminators false in cases $target:term)
     else
-      inductionCommand step major
+      Induction.command (mkFVar major) move.generalization
 
 /-- Reparse the displayed text, so validation checks exactly what the editor
 will insert, rather than syntax carrying hidden elaborator references. -/

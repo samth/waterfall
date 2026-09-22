@@ -119,27 +119,44 @@ rules, current strength and remaining structural depth. The factory is called
 only for the selected group. It can specialize a provider's analysis without
 adding effort accounting or search decisions to the critic itself.
 
-The built-in `Critics.implicitWitnesses constructor` and
-`Critics.fixedIndices major generalize summary` are consumed directly through
-`propose` at their original generation points in `Operations`. The former
-remains in the rules group after ordinary constructors, with cost two. The latter
-remains beside each major premise's ordinary induction alternatives, with cost
-one. This preserves interleaving and action selectors; installing them again
-through hooks would duplicate the proposals. They do not replace the ordinary
-constructor or induction operations.
+The built-in `Critics.implicitWitnesses constructor` remains in the rules group
+at cost two. `Critics.inductionMotives major summary` proposes parameter
+generalization, direct induction, and `Critics.fixedIndices` repairs, in that
+order, for each major premise. `Critics.functionalInduction call summary` selects
+the parameters outside a recursive call. These critics are consumed through
+`propose` at their original generation points, preserving costs and action
+selectors. Installing them again through hooks would duplicate proposals.
 
-`Induction.perform goal major reintroduce` executes Lean's ordinary induction
-and reintroduces the caller's dependency closure. It does not select a motive.
-The fixed-index critic owns its abstraction, retained equations and printed
-command; its caller still selects the optional parameters to generalize.
+`Move.generalization : Generalization.Plan` records exact preparation choices:
 
-Generalization extensions must retain their actual parameter choices. The
-existing motive enum and induction summary record a kind and a count, not a
-complete preparation plan. A narrower selector should supply its own command
-rather than rely on the ordinary renderer's broad reversion recipe. Likewise,
-`InductionPlan.equivalent` is not a general equality test for arbitrary move
-closures: different selections can share its current metadata. Such extensions
-must distinguish their execution-relevant plans before using deduplication.
+- `parameters`: local declarations to revert, including their dependency closure;
+- `abstractions`: expressions and whether to retain each defining equation;
+- `hypotheses`: where to abstract in addition to the target (empty means target only).
+
+The plan refers to the move's input checkpoint. Parameters are reverted before
+expression abstraction, so abstraction expressions and hypothesis identifiers
+must remain valid after reversion. `Generalization.prepare goal plan` returns
+the prepared goal, the substitution for changed hypotheses, and the complete
+reverted dependency closure. `Generalization.commands plan` renders the same
+preparation; it does not select parameters again. Dropping an abstraction's
+equation strengthens the conjecture and can lose provability; built-in index
+repair retains equations.
+
+`Induction.withPlan goal subject plan functional` combines preparation with
+ordinary or functional induction. Ordinary induction reintroduces the complete
+reverted dependency closure into each case; functional induction keeps those
+parameters quantified. `Induction.perform` remains the lower-level ordinary
+induction executor. `Induction.command` renders the plan and its continuation.
+All displayed scripts are independently checked by the suggestion frontend.
+
+A new generalization strategy can be an ordinary selector inside a critic. It
+sets the resulting move's `generalization` and uses `Induction.withPlan`; no
+additional strategy registry or search policy is needed. `InductionPlan.equivalent`
+compares exact plans as well as summaries, so equal-size selections of different
+variables remain distinct. It is still not an equality test for arbitrary
+executable closures: extensions must distinguish any other execution choices
+in their metadata before using deduplication. Recorded JSON plans retain action
+selectors rather than checkpoint-local expressions; replay regenerates the moves.
 
 The default provider is `Critics.blockedPremise`: case-split the sole unknown
 premise of an otherwise applicable local rule. The optional

@@ -27,9 +27,19 @@ arbitrary lemma arguments. Every unresolved constructor field remains an
 obligation. Local functions can also be applied to data-valued goals, including
 Type-valued induction hypotheses. `Critics.fixedIndices` proposes equation-preserving
 index abstraction, optionally combined with the caller's parameter generalization.
-Both repairs use the shared `Induction.perform` executor, which reintroduces the
-full reverted dependency closure into the cases. The generator still chooses
-which parameters to generalize; the critic owns index analysis and abstraction.
+`Critics.inductionMotives` selects the structural-induction parameters and
+composes those alternatives with fixed-index repair; `Critics.functionalInduction`
+selects parameters outside a recursive call. `Operations` chooses subjects and
+computes their scheduling summaries, but does not select generalizations.
+
+[Generalization.lean](../waterfall/Generalization.lean) executes and renders the
+exact plan stored on a move: parameter reversion followed by expression
+abstraction in the target and selected hypotheses, with explicit equation
+retention. [Induction.lean](../waterfall/Induction.lean) adds the continuation.
+Ordinary induction reintroduces the complete reverted dependency closure;
+functional induction leaves it quantified. Candidate identity compares the same
+plan, so different selections cannot be conflated solely because their counts
+agree. Selection stays in critics; these shared operations choose no strategy.
 
 ## From a proposed step to a complete proof
 
@@ -117,8 +127,9 @@ counters and other external callback effects cannot be rolled back.
 renders ordinary proof commands, and checks the printed text from the original
 checkpoint. Tactic adapters share existing commands through optional metadata;
 Meta operations have frontend recipes for induction, cases and constructors.
-The fixed-index critic supplies its own equation-preserving `generalize` and
-induction commands; the frontend does not reconstruct that repair.
+Generalization and induction commands come from the move's exact preparation
+plan, including fixed-index repair. The frontend does not reconstruct parameter
+selection from the context or infer it from motive tags.
 Forward instantiation prints `have` using the small derivation supplied to
 `MVarId.note`, recovered from the winning assignment. It uses `case'` to select a later sibling while preserving the other
 goals' order. Extension moves are regenerated with their installed hooks; critics

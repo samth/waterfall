@@ -108,6 +108,23 @@ public structure InductionSummary where
   expectedCases : Nat := 0
   deriving BEq, Repr, Inhabited, ToJson, FromJson
 
+/-- An expression abstraction. Retaining its defining equation preserves the
+original constraint; omitting it strengthens the conjecture. -/
+public structure Generalization.Abstraction where
+  expression : Expr
+  retainEquation : Bool := true
+  deriving BEq, Inhabited
+
+/-- Exact preparation choices, local to the move's input checkpoint.
+Revert parameters first (including dependencies), then abstract expressions in
+the target and the listed hypotheses. An empty hypothesis list means target only.
+These are operational choices, not a serializable search-policy summary. -/
+public structure Generalization.Plan where
+  parameters : Array FVarId := #[]
+  abstractions : Array Generalization.Abstraction := #[]
+  hypotheses : Array FVarId := #[]
+  deriving BEq, Inhabited
+
 /-- A forward-chaining argument represented without elaborating the constructor
 applications during candidate enumeration. Repeating `wrapper` exactly
 `wrapperApplications` times around `argumentSeed` identifies the argument that
@@ -135,6 +152,8 @@ public structure Move where
   replayable : Bool := true
   induction : InductionKind := .none
   inductionSummary : Option InductionSummary := none
+  /-- Exact motive preparation, shared by execution, identity and rendering. -/
+  generalization : Generalization.Plan := {}
   preparation : PreparationKind := .none
   closure : ClosureKind := .none
   motive : InductionMotive := .direct

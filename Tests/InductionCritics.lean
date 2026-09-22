@@ -68,9 +68,8 @@ private meta def parameterCritic (major : FVarId)
   repair := fun goal variables => pure #[{
     label := "parameter generalization", cost := 1,
     induction := .data, motive := .localGeneralization, major := some major,
-    run := do
-      let (reverted, goal) ← goal.revert variables
-      Induction.perform goal (mkFVar major) reverted.size }] }
+    generalization := {parameters := variables},
+    run := Induction.withPlan goal (mkFVar major) {parameters := variables} }] }
 
 elab "parameter_repair" broad:(" broad")? : tactic => withMainContext do
   let some major := (← getLCtx).findFromUserName? `n | throwError "missing major"
@@ -86,7 +85,20 @@ elab "parameter_repair" broad:(" broad")? : tactic => withMainContext do
   let goal ← getMainGoal
   let moves ← ((parameterCritic major.fvarId select).propose goal).collect
   let some move := moves[0]? | throwError "missing parameter repair"
+  let initial ← saveState
   move.run
+  let expected ← Canonical.snapshot (← getUnsolvedGoals)
+  initial.restore true
+  -- Compare native execution with the independently reparsed command. The
+  -- narrow selector must not silently print the default broad generalization.
+  let command ← Induction.command (mkFVar major.fvarId) move.generalization
+  let text := (← PrettyPrinter.ppTactic command).pretty
+  if broad.isNone && (text.splitOn "extra").length > 1 then
+    throwError "renderer generalized a parameter absent from the plan"
+  let stx ← ofExcept (Parser.runParserCategory (← getEnv) `tactic text)
+  evalTactic stx
+  unless (← Canonical.snapshot (← getUnsolvedGoals)) == expected do
+    throwError "generalization recipe differs from native execution"
 
 def advance : Nat → Nat → Nat
   | 0, acc => acc
@@ -100,5 +112,51 @@ example (n acc extra : Nat) : advance n acc + extra = n + acc + extra := by
 example (n acc extra : Nat) : advance n acc + extra = n + acc + extra := by
   parameter_repair broad
   all_goals simp_all [advance] <;> omega
+
+-- Equal counts and labels must not conflate different motive choices.
+example (n acc extra : Nat) : n + acc + extra = n + acc + extra := by
+  run_tac
+    let ctx ← getLCtx
+    let some accDecl := ctx.findFromUserName? `acc | throwError "missing acc"
+    let some extraDecl := ctx.findFromUserName? `extra | throwError "missing extra"
+    let goal ← getMainGoal
+    let some major := ctx.findFromUserName? `n | throwError "missing major"
+    let mk := fun parameter => do
+      let moves ← ((parameterCritic major.fvarId (fun _ => pure #[parameter])).propose goal).collect
+      let some move := moves[0]? | throwError "missing move"
+      pure ({move, summary := {«generalized» := 1}, ordinal := 0} : InductionPlan.Plan)
+    let a ← mk accDecl.fvarId
+    let b ← mk extraDecl.fvarId
+    unless (InductionPlan.deduplicate #[a, b, a]).size == 2 do
+      throwError "different generalization plans were conflated"
+  rfl
+
+-- Expression abstraction deliberately distinguishes equation-preserving repair
+-- from conjecture strengthening. Both execute and print from the same plan.
+elab "check_abstraction " retain:ident : tactic => withMainContext do
+  let some n := (← getLCtx).findFromUserName? `n | throwError "missing n"
+  let some h := (← getLCtx).findFromUserName? `h | throwError "missing h"
+  let expression ← mkAppM ``Nat.succ #[mkFVar n.fvarId]
+  let plan : Generalization.Plan := {
+    abstractions := #[{expression, retainEquation := retain.getId == `keep}],
+    hypotheses := #[h.fvarId] }
+  let saved ← saveState
+  let prepared ← Generalization.prepare (← getMainGoal) plan
+  setGoals [prepared.goal]
+  let expected ← Canonical.snapshot (← getUnsolvedGoals)
+  saved.restore true
+  let commands ← Generalization.commands plan
+  for command in commands do
+    let text := (← PrettyPrinter.ppTactic command).pretty
+    evalTactic (← ofExcept (Parser.runParserCategory (← getEnv) `tactic text))
+  unless (← Canonical.snapshot (← getUnsolvedGoals)) == expected do
+    throwError "abstraction scope or equations differ in rendering"
+
+example (n : Nat) (h : n.succ > 0) : n.succ > 0 := by
+  check_abstraction keep
+  assumption
+example (n : Nat) (h : n.succ > 0) : n.succ > 0 := by
+  check_abstraction drop
+  assumption
 
 end InductionCriticTests

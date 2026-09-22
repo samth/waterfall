@@ -30,6 +30,7 @@ scheme and motive data agree. Heuristic dominance is ordering only. -/
 public def equivalent (a b : Plan) : Bool :=
   a.move.induction == b.move.induction &&
   a.move.motive == b.move.motive &&
+  a.move.generalization == b.move.generalization &&
   a.move.major == b.move.major &&
   a.move.role == b.move.role &&
   a.move.label == b.move.label &&
