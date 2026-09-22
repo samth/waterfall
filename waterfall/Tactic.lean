@@ -27,8 +27,8 @@ public inductive Mode where
 /-- The standard callbacks for a mode, available for programmatic adaptation. -/
 public def Mode.hooks : Mode → Hooks
   | .search => Critics.hooks
-      (InductionPlan.hooks (Scheduling.hooks (activate := Critics.needsPrelude)))
-      (early := true) (speculate := false)
+      (InductionPlan.hooks
+        (Scheduling.hooks (activate := Scheduling.exposesMoves Critics.propose)))
   | .committed => Critics.hooks Committed.hooks
 
 /-- User-facing tactic options. The inherited `Config` fields control resources

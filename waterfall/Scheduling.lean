@@ -6,7 +6,7 @@ meta section
 
 /-!
 A bounded closer-scheduling experiment. The ordinary fair search is unchanged.
-On an activated prelude contour, cheap closure and proof shaping precede expensive
+On a bounded prelude contour, cheap closure and proof shaping precede expensive
 saturation; every operation remains in a finite stage.
 -/
 
@@ -40,15 +40,21 @@ public def choose (space : Space State) : Choices (Node State) := fun visit => d
   if ← tryStage space prepared #[.close]
       (fun c => c.move.closure != .simplification &&
         c.move.closure != .saturation) visit then return true
-  if ← tryStage space prepared #[.basic, .hypotheses]
-      (fun c => c.action.group == .basic || c.move.role == `critic) visit then return true
+  -- Introduce a quantified goal as a whole before spending structural depth
+  -- on its body. This is independent of any particular repair provider.
+  if ← tryStage space prepared #[.basic]
+      (fun c => c.move.preparation == .allBinders) visit then return true
+  if ← tryStage space prepared #[.hypotheses]
+      (fun c => c.move.preparation != .none) visit then return true
+  if ← tryStage space prepared #[.basic]
+      (fun c => c.move.preparation != .allBinders) visit then return true
   let inductions ← (space.propose prepared #[#[.induction]]
     (fun c => c.move.induction != .none)).collect
   let dominant := inductions.any fun a =>
     inductions.any fun b => InductionPlan.dominates a.candidate b.candidate
   if dominant && (← tryProposals space inductions visit) then return true
   if ← tryStage space prepared #[.hypotheses]
-      (fun c => c.move.role != `critic) visit then return true
+      (fun c => c.move.preparation == .none) visit then return true
   if ← tryStage space prepared #[.close]
       (fun c => c.move.closure == .simplification) visit then return true
   if ← tryStage space prepared #[.close]
@@ -60,6 +66,21 @@ public def choose (space : Space State) : Choices (Node State) := fun visit => d
       (fun _ => true) visit then return true
   tryStage space prepared #[.functions, .induction]
     (fun c => c.move.induction == .none) visit
+
+/-- Read-only lookahead for a bounded preparation trial. Any move producer can
+supply the continuation; scheduling knows neither its evidence nor its rules.
+Already exposed goals use the ordinary schedule. -/
+public def exposesMoves (propose : MVarId → Choices Move)
+    (goals : List MVarId) : TacticM Bool := do
+  let saved ← Tactic.saveState
+  try
+    for goal in goals do
+      saved.restore true
+      let (introduced, child) ← goal.withContext goal.intros
+      if introduced.isEmpty then continue
+      if ← propose child (fun _ => pure true) then return true
+    return false
+  finally saved.restore true
 
 public def hooks (inner : Hooks := {})
     (activate : List MVarId → TacticM Bool := fun _ => pure true) : Hooks := { inner with

@@ -10,6 +10,7 @@ import waterfall.Observe
 import waterfall.Operations
 import waterfall.Parallel
 import waterfall.Protocol
+import waterfall.Repair
 import waterfall.Suggestions
 import waterfall.Scheduling
 
@@ -41,8 +42,9 @@ run_cmd do
       `waterfall.Committed.State, `waterfall.Committed.choose,
       `waterfall.Committed.hooks,
       `waterfall.movesFor, `waterfall.prepareRules, `waterfall.operations,
-      `waterfall.Critics.blockedPremises, `waterfall.Critics.prelude,
-      `waterfall.Critics.exposesBlockedPremise, `waterfall.Critics.needsPrelude,
+      `waterfall.Critic, `waterfall.Critic.propose, `waterfall.Critic.hooks,
+      `waterfall.Critics.propose, `waterfall.Critics.blockedPremise, `waterfall.Critics.blockedPremises,
+      `waterfall.Critics.quantifiedRewrite,
       `waterfall.Critics.hooks,
       `waterfall.InductionPlan.Plan, `waterfall.InductionPlan.equivalent,
       `waterfall.InductionPlan.deduplicate, `waterfall.InductionPlan.quality,
@@ -50,7 +52,7 @@ run_cmd do
       `waterfall.InductionPlan.dominates,
       `waterfall.InductionPlan.hooks,
       `waterfall.Scheduling.State, `waterfall.Scheduling.depthForEffort,
-      `waterfall.Scheduling.choose, `waterfall.Scheduling.hooks,
+      `waterfall.Scheduling.choose, `waterfall.Scheduling.exposesMoves, `waterfall.Scheduling.hooks,
       `waterfall.attempt, `waterfall.prepareProposals, `waterfall.proposePrepared,
       `waterfall.propose, `waterfall.executeProposal,
       `waterfall.expand, `waterfall.checkComplete,

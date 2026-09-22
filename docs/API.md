@@ -12,7 +12,9 @@ small interfaces.
 | `waterfall.Core` | `run` and engine transitions |
 | `waterfall.Protocol` | `Config`, `Stats`, `Move`, `Candidate`, `Job`, `Node`, `Space`, `SearchPolicy`, `Hooks` |
 | `waterfall.Execution` | Metered move execution and final root validation |
-| `waterfall.Critics` | Guarded blocked-premise moves and bounded search guidance |
+| `waterfall.Repair` | Typed obstruction analysis and deferred repair proposals |
+| `waterfall.Critics` | Blocked-premise splitting and quantified-equality specialization |
+| `waterfall.Scheduling` | Bounded preparation lookahead and staged search |
 | `waterfall.Choices` | Generic lazy selection, filtering, collection and commitment |
 | `waterfall.Parallel` | Isolated concurrent trials, shared work accounting and cancellation |
 | `waterfall.Committed` | ACL2-inspired callbacks over the shared engine |
@@ -87,10 +89,39 @@ expansion and restart are refused. Ambient limits still constrain traversal.
 
 `Move.preparation` distinguishes one-binder introduction, bulk introduction,
 pointwise equality, normalization and target splitting. Policies should use
-this typed field rather than diagnostic labels. `Critics.hooks` composes with an
-arbitrary existing policy: it appends guarded case-split proposals and places
-them first without dropping any candidate. Search mode enables its early
-goal-directed prelude; committed mode shares the moves and ordering only.
+this typed field rather than diagnostic labels. Scheduling consumes this
+metadata independently of the providers that produced it.
+
+## Proof critics
+
+A `Critic` supplies three things: its own `Evidence` type, an `observe` function
+from a goal to evidence, and a `repair` function from evidence to deferred
+`Move`s. Neither function executes the proposed proof search. `Critic.propose`
+runs both under full tactic-state rollback and exposes a `Choices Move` producer;
+repair construction stops when its consumer accepts a proposal. Evidence and
+returned moves must refer only to the input checkpoint. Temporary metavariables
+created while probing cannot escape; a recipe can reconstruct them on execution.
+External IO effects are not rolled back.
+
+`Critic.hooks critics inner` appends repairs in the hypotheses group, preserving
+all existing moves and the consumer's policy, ordering, trials and middleware.
+This batch adapter materializes proposals; the producer interface itself can be
+consumed lazily. Custom operations remain available through `Hooks.extraMoves`.
+
+The default provider is `Critics.blockedPremise`: case-split the sole unknown
+premise of an otherwise applicable local rule. The optional
+`Critics.quantifiedRewrite` specializes a quantified equality at a target
+subexpression. It offers
+contracting rewrites or rewrites exposing reflexivity/an existing assumption.
+It retains every conditional premise as an obligation. Both provide ordinary
+proof commands for checked suggestions; neither controls search or commitment.
+
+`Scheduling.exposesMoves producer` performs read-only lookahead after root
+introductions. Search mode uses it with `Critics.propose` to decide whether to
+request a bounded preparation trial. Any move producer can supply this lookahead.
+`Scheduling.choose` puts preparatory moves ahead of expensive closers in that
+trial, using typed metadata, then retains all remaining stages. Committed mode
+uses the same repair providers with its own existing traversal.
 
 An observer calls its continuation once and leaves proof state alone. Resource
 control middleware can reduce allowances or abort spans. The engine owns proof

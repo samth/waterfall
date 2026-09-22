@@ -67,11 +67,26 @@ resource `Config`, spent-work `Stats`, proof `Move`s and `Selection`s, pending
 keeps these interfaces together; it does not reduce the total implementation.
 
 [Execution.lean](../waterfall/Execution.lean) meters one deferred move and
-performs final root validation. [Critics.lean](../waterfall/Critics.lean) is a
-standard hook extension. Its blocked-premise critic proposes a case split only
-when a local rule already matches the target except for one proposition and at
-least one other premise is present. Search mode enables its bounded early trial;
-committed mode uses the same proof operation without the early trial.
+performs final root validation. [Repair.lean](../waterfall/Repair.lean) defines
+`Critic`: an evidence type and two functions, observation and repair construction.
+Each runs under tactic-state rollback. Its lazy producer hands ordinary `Move`s
+to its consumer; a small adapter appends them through `Hooks.extraMoves`.
+
+[Critics.lean](../waterfall/Critics.lean) implements two consumers of that
+interface. The blocked-premise critic proposes a split when a local rule matches
+the target except for one proposition and another premise is present. The
+quantified-rewrite critic matches a local equality at a target subexpression,
+records the rule and direction, then reconstructs the specialization during
+execution. Conditional premises become sibling obligations. Quantified rewriting is
+opt-in through `Critic.hooks`; the default retains only the blocked-premise
+provider. Neither critic
+has a search loop, a trial schedule, or a proof-acceptance path.
+
+[Scheduling.lean](../waterfall/Scheduling.lean) independently performs bounded
+lookahead after introductions and orders preparatory moves before expensive
+closure. It accepts an arbitrary move producer, without inspecting obstruction
+types or critic names. Search mode composes this scheduler with the default
+critics; committed mode uses the same repairs with its own traversal.
 
 The default policy follows every continuation in order. [Committed.lean](../waterfall/Committed.lean)
 uses the same operations with first-progress commitment, ordinary work before
@@ -93,16 +108,15 @@ Meta operations have frontend recipes for induction, cases and constructors.
 Fixed-index induction prints equation-preserving `generalize` commands first.
 Forward instantiation prints `have` using the small derivation supplied to
 `MVarId.note`, recovered from the winning assignment. It uses `case'` to select a later sibling while preserving the other
-goals' order. Extension moves are regenerated with their installed hooks; the
-blocked-premise critic prints `by_cases` from its typed subject. If command rendering fails, it prints the completed proof term,
+goals' order. Extension moves are regenerated with their installed hooks; critics
+supply their own `by_cases` or `rewrite` commands through `Move.command?`. If command rendering fails, it prints the completed proof term,
 inlining solver-generated auxiliary declarations. Only a checked replacement is
 offered through Lean's editor hint. Each parallel worker has its own recorder;
 only the winning worker's hint is retained.
 
-## Size and refactoring limits
+## Refactoring boundary
 
-`Core.lean` remains below the established limit at 498 noncomment lines.
-Metered single-move execution is 36 lines and the critic extension is 67 lines.
-The separation keeps proof search, operation execution and optional guidance
-independently reviewable. The hint frontend adds no inference family, search
-policy, or external dependency.
+The core proof engine and metered move execution are unchanged by the critic
+interface. Proof search, speculative analysis and individual repair operations
+remain independently reviewable. The hint frontend adds no inference family,
+search policy, or external dependency.

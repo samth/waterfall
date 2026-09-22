@@ -123,11 +123,6 @@ private def command (step : Selection) (rules : Array (TSyntax `term)) (hooks : 
     -- In particular, a closing `done` must not inspect those pending siblings.
     if step.action.group == .close then return ← `(tactic| focus ($command:tactic))
     return command
-  if move.role == `critic then
-    let some subject := move.subject | throwError "missing critic subject"
-    let proposition ← PrettyPrinter.delab subject
-    let name := mkIdent ((← getLCtx).getUnusedName `wf_blocker)
-    return ← `(tactic| by_cases $name:ident : $proposition)
   if step.action.group == .functions then return ← functionalCommand move
   -- Resolve constructor names from the target's declaration, avoiding parsing
   -- a display name back into a Lean identifier (which can contain quoted dots).

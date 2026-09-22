@@ -78,7 +78,7 @@ example (p q r : Prop) (hp : p) (positive : p → q → r)
   all_goals grind
 
 -- Preparation metadata is semantic policy input. The base generator retains
--- its historical one-binder-first order; critic hooks may reorder typed moves.
+-- its historical one-binder-first order; scheduling hooks may reorder typed moves.
 example : ∀ p : Prop, p → p := by
   run_tac
     let moves ← movesFor (← getMainGoal) #[] 1 1 .basic
@@ -88,24 +88,15 @@ example : ∀ p : Prop, p → p := by
   intro p hp
   exact hp
 
--- Prelude inference is read-only and requires a critic exposed by introducing
--- root binders. An ordinary implication does not request speculative search.
+-- Critics only contribute moves. Adding them preserves a consumer's trial
+-- schedule; scheduling no longer recognizes a particular critic's evidence.
 example : True := by
   run_tac
-    let outer ← Tactic.saveState
-    let guided ← mkFreshExprSyntheticOpaqueMVar (← Term.elabType
-      (← `(term| ∀ p q r : Prop, p → (p → q → r) → (¬q → r) → r)))
-    setGoals [guided.mvarId!]
-    let trials ← Critics.prelude [guided.mvarId!]
-    unless trials.size == 1 && trials[0]!.depth == 5 &&
-        trials[0]!.strength == 1 && trials[0]!.attempts == 128 do
-      throwError "blocked-premise prelude was not inferred"
-    outer.restore true
-    let plain ← mkFreshExprSyntheticOpaqueMVar (← Term.elabType (← `(term| ∀ p : Prop, p → p)))
-    setGoals [plain.mvarId!]
-    unless (← Critics.prelude [plain.mvarId!]).isEmpty do
-      throwError "ordinary implication received a critic prelude"
-    outer.restore true
+    let root ← getMainGoal
+    let inner : Hooks := { prelude := fun _ _ => pure #[{depth := 3, attempts := 7}] }
+    let trials ← (Critics.hooks inner).prelude {} [root]
+    unless trials.size == 1 && trials[0]!.depth == 3 && trials[0]!.attempts == 7 do
+      throwError "critic changed its consumer's trial schedule"
   trivial
 
 example (P : Nat → Prop) (h : ∀ n, P n) : P 0 := by

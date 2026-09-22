@@ -14,7 +14,7 @@ name = "waterfall"
 
 [[lean_lib]]
 name = "waterfallTests"
-roots = ["Tests.Core", "Tests.Canonical", "Tests.Observe", "Tests.ContextPolicy",
+roots = ["Tests.Critics", "Tests.Core", "Tests.Canonical", "Tests.Observe", "Tests.ContextPolicy",
   "Tests.DefaultPolicy", "Tests.Exhaustion", "Tests.SearchPolicy", "Tests.Schedule",
   "Tests.TrialPolicy", "Tests.InductionPlan", "Tests.Options", "Tests.Import", "Tests.ModuleImport", "Tests.PublicAPI", "Tests.Capabilities",
   "Tests.Parallel", "Tests.ParallelAsync", "Tests.Regressions", "Tests.Suggestions", "Tests.ForeignTrace", "Tests.Coexistence", "Tutorial.Guide", "Tutorial.Examples"]
