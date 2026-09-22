@@ -57,13 +57,21 @@ public def hooks (rules : Array (TSyntax `term)) (base : Hooks := {}) : Hooks :=
       -- deeper continuation portfolio, rather than taking its budget away.
       if goals.length != 1 || cfg.effort <= ({} : Config).effort then
         return ← base.prelude cfg goals
+      -- A deeper contour needs room for several operations, not just more
+      -- attempts. Do not spend a small declaration budget on a portfolio whose
+      -- quarter-budget reserve cannot cover one ordinary slice per depth step.
+      let depth := Scheduling.depthForEffort cfg.effort + 2
+      let ctx ← readThe Core.Context
+      let remaining := ctx.initHeartbeats + ctx.maxHeartbeats - (← IO.getNumHeartbeats)
+      if ctx.maxHeartbeats != 0 && remaining / 4 < cfg.attemptHeartbeats * depth then
+        return ← base.prelude cfg goals
       let mut trials : Array PreludeTrial := #[]
       for g in goals do
         let ps ← rootPlans g (← prepareRules g rules)
         for i in [:2 * ps.size] do
           trials := trials.push {
             tag := Name.num `inductionContinuations i
-            depth := Scheduling.depthForEffort cfg.effort + 2, strength := 2,
+            depth := depth, strength := 2,
             attempts := cfg.effort / (8 * max 1 ps.size)}
       let legacy := if trials.isEmpty then #[] else
         #[{tag := `continuationLegacy, depth := 2, attempts := cfg.effort / 10}]

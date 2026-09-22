@@ -8,6 +8,23 @@ def copy : List Nat → List Nat
   | [] => []
   | a :: xs => a :: copy xs
 
+-- Extra attempt effort alone must not enable an unaffordable deep portfolio.
+example (xs : List Nat) : copy xs = copy xs := by
+  run_tac withMainContext do
+    let goals ← getGoals
+    let check (budget : Nat) (expected : Bool) : TacticM Unit := do
+      let now ← IO.getNumHeartbeats
+      let trials ← withTheReader Core.Context
+        (fun c => { c with initHeartbeats := now, maxHeartbeats := budget }) do
+          (Mode.search.hooks #[]).prelude {effort := 10000} goals
+      let found := trials.any fun t => match t.tag with
+        | .num `inductionContinuations _ => true
+        | _ => false
+      unless found == expected do throwError "incorrect continuation budget gate"
+    check 200000000 false
+    check 2000000000 true
+  rfl
+
 -- The recursive result occurs in two premises, never in the conclusion.
 -- Enumeration and execution must survive rollback, and clear only unused data.
 example (xs : List Nat) (P Q : List Nat → Prop)
