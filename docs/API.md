@@ -81,7 +81,7 @@ expansion and restart are refused. Ambient limits still constrain traversal.
 - `policy`: choose transitions, agenda order and traversal.
 - `prelude`: infer bounded depth/strength trials from the original goals. Each
   request has its own attempt cap and the engine also limits all such work to
-  one quarter of public effort. The ordinary `trials` schedule remains intact.
+  one quarter of the effort remaining when that trial starts. The ordinary `trials` schedule remains intact.
 - `trials`: finite batches of depth/positive-strength pairs by round.
 - `batches`: lazy structural groups; each original group must occur exactly once.
 - `order`: a permutation of candidate selectors within a batch; validated.

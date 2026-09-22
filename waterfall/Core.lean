@@ -256,13 +256,13 @@ public def run (cfg : Config) (rules : Array (TSyntax `term) := #[])
       return ok
     let mut success := false
     -- Prelude work is deliberately bounded twice: by its own request and by a
-    -- quarter of the public effort. Failed speculative guidance therefore
-    -- leaves most of the original schedule available even at small budgets.
+    -- quarter of the remaining effort. Each failed speculative trial therefore
+    -- leaves most of its starting allowance for the rest of the schedule.
     for trial in ← hooks.prelude cfg original do
       if success || (← stats.get).attempts >= cfg.effort then break
       unless trial.strength > 0 do throwError "waterfall prelude strength must be positive"
       let spent := (← stats.get).attempts
-      let allowance := min trial.attempts (cfg.effort / 4)
+      let allowance := min trial.attempts ((cfg.effort - spent) / 4)
       if allowance == 0 then continue
       let trialCfg := { cfg with effort := min cfg.effort (spent + allowance) }
       if ← proveAtDepthAndStrength trialCfg .prelude trial.depth trial.strength then success := true

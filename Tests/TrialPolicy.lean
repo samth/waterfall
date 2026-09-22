@@ -52,34 +52,42 @@ elab "check_trial_dispatch" : tactic => do
 
 example : True := by check_trial_dispatch; trivial
 
--- A speculative prelude cannot consume more than a quarter of public effort,
--- even when it asks for more. The unchanged fair schedule continues afterward.
+-- The scheduled prelude scales with effort instead of stopping at 64 attempts.
+-- A second trial receives a share of the remaining budget; tiny budgets skip
+-- preludes altogether. Failed trials leave the ordinary fair search available.
 elab "check_bounded_prelude" : tactic => do
   let outer ← Tactic.saveState
-  let root ← mkFreshExprSyntheticOpaqueMVar (mkConst ``False)
-  setGoals [root.mvarId!]
-  let current ← IO.mkRef 0
-  let counts ← IO.mkRef (#[] : Array Nat)
-  let hooks : Hooks := {
-    prelude := fun _ _ => pure #[{ depth := 1, attempts := 128 }]
-    extraMoves := fun _ _ _ _ group => do
-      if group != .basic then return #[]
-      return (List.range 20).toArray.map fun _ => {
-        cost := 1, label := "failed prelude fixture", run := throwError "fixture" }
-    around := fun span _ body => do
-      if span.phase == .trial then
-        current.set 0
-        try
-          return ← body
-        finally counts.modify (·.push (← current.get))
-      if span.phase == .action then current.modify (· + 1)
-      body }
-  let closed ← tryCatchRuntimeEx (do
-    discard <| run { effort := 40, attemptHeartbeats := 2000000 } #[] hooks
-    pure true) fun _ => pure false
-  unless !closed && (← counts.get)[0]? == some 10 do
-    throwError "prelude exceeded its bounded effort share"
-  outer.restore true
+  for effort in [3, 40, 400] do
+    let root ← mkFreshExprSyntheticOpaqueMVar (mkConst ``False)
+    setGoals [root.mvarId!]
+    let current ← IO.mkRef 0
+    let counts ← IO.mkRef (#[] : Array Nat)
+    let hooks := Scheduling.hooks {
+      prelude := fun cfg _ => pure #[{ depth := 1, attempts := cfg.effort }]
+      extraMoves := fun _ _ _ _ group => do
+        if group != .basic then return #[]
+        return (List.range effort).toArray.map fun _ => {
+          cost := 1, label := "failed prelude fixture", run := throwError "fixture" }
+      around := fun span _ body => do
+        if span.phase == .trial then
+          current.set 0
+          try
+            return ← body
+          finally counts.modify (·.push (← current.get))
+        if span.phase == .action then current.modify (· + 1)
+        body }
+    let closed ← tryCatchRuntimeEx (do
+      discard <| run { effort, attemptHeartbeats := 2000000 } #[] hooks
+      pure true) fun _ => pure false
+    let observed ← counts.get
+    let first := effort / 4
+    let second := (effort - first) / 4
+    let expected := (#[first, second]).filter (· > 0)
+    unless !closed && !(← root.mvarId!.isAssigned) &&
+        observed.take expected.size == expected && observed.size > expected.size &&
+        observed.foldl (· + ·) 0 == effort do
+      throwError "prelude or subsequent fair-search allowance changed: {observed}"
+    outer.restore true
 
 example : True := by check_bounded_prelude; trivial
 

@@ -303,8 +303,8 @@ public structure SearchPolicy where
 public def SearchPolicy.default : SearchPolicy := ⟨Unit, (), fun space => space.expand 0 #[] (fun _ => true)⟩
 
 /-- A bounded speculative trial before the ordinary fair schedule. The engine
-also limits `attempts` to one quarter of the run's total effort, so a failed
-prelude cannot consume the main search. -/
+also limits `attempts` to one quarter of the effort remaining when this trial
+starts, so a failed trial leaves room for the subsequent schedule. -/
 public structure PreludeTrial where
   depth : Nat
   strength : Nat := 1

@@ -49,7 +49,16 @@ private def missingPremises (g : MVarId) : TacticM (Array MissingPremise) := g.w
 
 /-- A local rule almost applies. Splitting its one unknown premise exposes the
 positive application and a negative branch which must independently be proved.
-This critic proposes the split; it never commits to it or starts another search. -/
+This critic proposes the split; it never commits to it or starts another search.
+
+The heuristic requires at least one premise already present in the local
+context and exactly one unknown premise after applying the rule to the target.
+It misses useful rules with no known premises or several missing premises,
+and premises that are provable but not already available as hypotheses.
+Generalizing it would require proposing several possible blockers (or sequences
+of splits), and optionally checking whether premises can be discharged cheaply.
+That could generate irrelevant splits, exponentially many case combinations,
+and extra premise-solving work before any useful repair is tried. -/
 public def blockedPremise : Critic := {
   Evidence := MissingPremise
   observe := missingPremises
@@ -104,7 +113,15 @@ private def rewriteMatches (g : MVarId) : TacticM (Array RewriteMatch) := g.with
 
 /-- Goal-directed specialization of a quantified equality. Conditional rules
 leave *all* remaining premises in the agenda; rewriting is never evidence that
-those premises hold. The source hypothesis is retained, including dependencies. -/
+those premises hold. The source hypothesis is retained, including dependencies.
+
+The heuristic accepts only rewrites that strictly reduce expression-tree size,
+match an existing hypothesis, or expose a reflexive equality. It misses useful
+size-preserving rearrangements and expansions that enable a later rewrite or
+induction step. Generalizing it would require admitting those intermediate
+forms, with a search budget and cycle control rather than contraction as the
+filter. This can introduce inverse-rewrite loops, larger intermediate terms,
+and many redundant alternatives to proofs already found by simplification. -/
 public def quantifiedRewrite : Critic := {
   Evidence := RewriteMatch
   observe := rewriteMatches

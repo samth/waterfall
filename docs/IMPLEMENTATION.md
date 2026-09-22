@@ -63,7 +63,7 @@ Proving siblings independently and combining their assignments would be wrong.
 
 `run` first executes any bounded `PreludeTrial`s requested by the installed
 hooks, then calls `proveAtDepthAndStrength` along the configured fair trial schedule. A
-failed prelude can use at most one quarter of total effort and cannot remove a
+failed prelude can use at most one quarter of the remaining effort and cannot remove a
 later trial. Depth
 limits structural proof steps; strength increases solver limits and their
 heartbeat slices. Effort counts attempts across every failed branch and trial.

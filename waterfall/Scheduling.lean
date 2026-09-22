@@ -109,10 +109,12 @@ public def hooks (inner : Hooks := {})
     else space.expand 0 #[] (fun _ => true)⟩
   -- In a branching search, the depth supported by a node budget grows
   -- logarithmically. This budget-derived contour bounds attractive wrong
-  -- branches without reinstating a feature-specific magic depth.
+  -- branches without reinstating a feature-specific magic depth. Request the
+  -- available effort; the engine caps this trial to a quarter of what remains
+  -- when it starts, leaving the ordinary fair schedule room to run.
   prelude := fun cfg goals => do
     let scheduled := if ← activate goals then
-      #[{ depth := depthForEffort cfg.effort, attempts := 64 }] else #[]
+      #[{ depth := depthForEffort cfg.effort, attempts := cfg.effort }] else #[]
     return scheduled ++ (← inner.prelude cfg goals)
 } activate
 
