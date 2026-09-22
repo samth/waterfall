@@ -127,11 +127,11 @@ public def hooks (inner : Hooks := {})
   -- In a branching search, the depth supported by a node budget grows
   -- logarithmically. This budget-derived contour bounds attractive wrong
   -- branches without reinstating a feature-specific magic depth. Both finite
-  -- contours share the engine's quarter-effort reserve and ambient heartbeat cap.
+  -- contours use the engine's per-trial remaining-effort and heartbeat caps.
   prelude := fun cfg goals => do
     let scheduled := if ← activate goals then
-      #[{ depth := depthForEffort cfg.effort, attempts := 64 },
-        { tag := `constructorExposure, depth := depthForEffort cfg.effort, attempts := 64 }] else #[]
+      #[{ depth := depthForEffort cfg.effort, attempts := cfg.effort },
+        { tag := `constructorExposure, depth := depthForEffort cfg.effort, attempts := cfg.effort }] else #[]
     return scheduled ++ (← inner.prelude cfg goals)
 }
 

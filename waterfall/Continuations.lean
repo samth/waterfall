@@ -59,7 +59,7 @@ public def hooks (rules : Array (TSyntax `term)) (base : Hooks := {}) : Hooks :=
         return ← base.prelude cfg goals
       -- A deeper contour needs room for several operations, not just more
       -- attempts. Do not spend a small declaration budget on a portfolio whose
-      -- quarter-budget reserve cannot cover one ordinary slice per depth step.
+      -- quarter-budget share cannot cover one ordinary slice per depth step.
       let depth := Scheduling.depthForEffort cfg.effort + 2
       let ctx ← readThe Core.Context
       let remaining := ctx.initHeartbeats + ctx.maxHeartbeats - (← IO.getNumHeartbeats)

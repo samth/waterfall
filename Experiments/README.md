@@ -17,8 +17,8 @@ separate constructor-first and normalization-first induction continuations.
 Grounded root schemes are ranked using Lean's induction metadata. Deeper
 structural exploration retains the cheap leaf-solver configuration: increasing
 saturation limits at the same time can make a previously short proof expensive.
-All speculation shares the existing quarter-effort reserve, ambient heartbeat
-budget, rollback, and complete kernel validation. The ordinary fair search
+Each trial is capped at a quarter of its starting remaining effort and a share
+of remaining heartbeats. Speculation uses rollback and complete kernel validation. The ordinary fair search
 remains available. No theorem names or corpus-specific definitions occur in the
 implementation.
 

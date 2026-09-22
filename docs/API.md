@@ -176,8 +176,8 @@ additional premise-only and conditional-composition variants.
 `Recursion` shares context/call analysis without choosing a traversal.
 `RecursionScheduling` and `Continuations` select bounded contours independently;
 main's `Scheduling.preparations` middleware still orders contextual preparations.
-The engine limits the whole prelude portfolio to one quarter of effort and caps
-each trial's heartbeat share. `PreludeTrial.tag` is an opaque policy selector,
+Each trial receives at most one quarter of its starting remaining effort and a
+bounded share of remaining heartbeats. `PreludeTrial.tag` is an opaque policy selector,
 carried by `Node.trialTag`; it has no interpretation in the engine.
 
 The default hypothesis provider is `Critics.blockedPremise`: case-split the sole unknown
