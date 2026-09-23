@@ -22,7 +22,7 @@ elab "check_leaf_schedule" : tactic => withMainContext do
   let root ← mkFreshExprSyntheticOpaqueMVar (mkConst ``False)
   setGoals [root.mvarId!]
   let events ← IO.mkRef (#[] : Array (Nat × Nat))
-  let hooks : Hooks := { around := fun span _ body => do
+  let hooks : Hooks := { trials := diagonalTrials 3, around := fun span _ body => do
     if let .action := span.phase then
       if let some action := span.action then
         if action.group == .close then

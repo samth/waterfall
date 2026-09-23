@@ -317,3 +317,11 @@ an unsuccessful worker may already have run and are not undone by cancellation.
 `Stats.attempts` and `nodes` are aggregate counts; depth, strength and choices
 identify the winning worker. `Observe.capture` remains a sequential convenience
 API; use the initializer above for parallel observation.
+
+### Indexed inversion preparation
+
+`waterfall.FocusingCritics` exports `Critics.indexedFocus`. The built-in basic
+operation group includes this critic before ordinary introductions. It fuses
+introductions and shrinking constructor-indexed inversions into one backtrackable
+move, keeping every resulting case as an obligation. It declines cycles rather
+than committing to an unrolling, and retains the ordinary case-analysis moves.

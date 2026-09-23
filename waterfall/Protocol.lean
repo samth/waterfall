@@ -338,7 +338,7 @@ public structure Hooks where
   prelude : Config → List MVarId → TacticM (Array PreludeTrial) := fun _ _ => pure #[]
   /-- Finite batches of trials. For eventual reachability, visit every finite
   depth and positive strength; effort truncates this one sequence globally. -/
-  trials : Nat → Array (Nat × Nat) := diagonalTrials 3
+  trials : Nat → Array (Nat × Nat) := diagonalTrials 1
   /-- Effective admission and path cost. The default charges library moves four
   and constructor closers one; the five ordinary closers remain free.
   Finite fixed costs retain eventual availability. Structural generators may
