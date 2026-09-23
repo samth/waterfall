@@ -15,6 +15,43 @@ public structure Prepared where
   substitution : FVarSubst
   reverted : Array FVarId
 
+/-- Plan equation-free abstraction of selected results. Preserve hypotheses
+about those results, and clear premises that still depend on their inputs.
+Reject conclusions that use an input independently of the selected results.
+
+Assigned metavariables must be instantiated before dependency analysis: an
+assigned induction motive can discard an argument or hide a useful invariant.
+This selects a plan only; the caller chooses results, execution and continuation. -/
+public def abstractIndependent (goal : MVarId) (results : Array Expr) : MetaM (Option Plan) :=
+    goal.withContext do
+  if results.isEmpty then return none
+  let results ← results.mapM instantiateMVars
+  let lctx ← getLCtx
+  let mut inputs := #[]
+  for d in lctx do
+    unless d.isImplementationDetail || d.binderInfo.isInstImplicit ||
+        (← isProp d.type) || (← isType (mkFVar d.fvarId)) do
+      inputs := inputs.push d.fvarId
+  let dependsOnInput := fun expression =>
+    -- The replacement is only an occurrence marker; no synthetic proposition
+    -- is submitted to the kernel or used to construct the generalized goal.
+    let residual := expression.replace fun term =>
+      if results.contains term then some (mkConst ``True) else none
+    inputs.any fun id => residual.containsFVar id && results.any (·.containsFVar id)
+  if dependsOnInput (← instantiateMVars (← goal.getType)) then return none
+  let mut hypotheses := #[]
+  let mut clearBefore := #[]
+  for d in lctx do
+    if d.isImplementationDetail || !(← isProp d.type) then continue
+    let hypothesis ← instantiateMVars d.type
+    if dependsOnInput hypothesis then
+      clearBefore := #[d.fvarId] ++ clearBefore
+    else if results.any (fun result => (hypothesis.find? (· == result)).isSome) then
+      hypotheses := hypotheses.push d.fvarId
+  return some {
+    abstractions := results.map (fun expression => {expression, retainEquation := false})
+    hypotheses, clearBefore, clearAfter := inputs.reverse }
+
 /-- Execute a selected plan without choosing a strategy or an induction scheme.
 The caller owns rollback, as for any other proof operation. -/
 public def prepare (goal : MVarId) (plan : Plan) : MetaM Prepared := goal.withContext do
