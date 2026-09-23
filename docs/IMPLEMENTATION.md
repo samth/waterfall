@@ -32,6 +32,19 @@ composes those alternatives with fixed-index repair; `Critics.functionalInductio
 selects parameters outside a recursive call. `Operations` chooses subjects and
 computes their scheduling summaries, but does not select generalizations.
 
+[FocusingCritics.lean](../waterfall/FocusingCritics.lean) supplies
+`Critics.indexedFocus`: introductions followed by constructor-constrained
+inversion of recursive evidence. It uses actual inductive indices, combines
+strictly shrinking singleton inversions along the same index of the same relation,
+and retains all branching obligations. Classification indices such as colors do
+not drive this structural preparation. The relation must constrain that index
+in its own constructors; generic transitive closures do not qualify. Assigned hypothesis types are resolved
+before their index metadata is inspected.
+A rejected later inversion restores the last accepted child. The introduction
+block and visible constructors contribute to structural cost, so a fused proof
+does not prematurely finish one sibling at depths too small for the others. This is an ordinary
+backtrackable move; separate introduction, cases and induction moves remain.
+
 [Generalization.lean](../waterfall/Generalization.lean) executes and renders the
 exact plan stored on a move: parameter reversion followed by expression
 abstraction in the target and selected hypotheses, with explicit equation
@@ -66,7 +79,17 @@ hooks, then calls `proveAtDepthAndStrength` along the configured fair trial sche
 failed prelude can use at most one quarter of the remaining effort and cannot remove a
 later trial. Depth
 limits structural proof steps; strength increases solver limits and their
-heartbeat slices. Effort counts attempts across every failed branch and trial.
+heartbeat slices. The default diagonal schedule reaches structural depth after
+one shallow solver trial. Simplifier rewrite steps grow linearly with strength;
+recursive discharge depth grows more slowly, avoiding a large branching increase
+on every trial. Both limits remain unbounded as strength increases.
+
+Contradiction also contains recursive case analysis. Direct `False` goals receive
+Lean's ordinary fuel multiplied by strength; speculative contradiction on other
+targets starts with fuel equal to strength. Thus recursive refutation remains
+available without charging its full initial cost at every search node.
+
+Effort counts attempts across every failed branch and trial.
 Only after the whole agenda closes are retained `Selection`s delivered to
 observers. `Execution.checkComplete` verifies every original root has a proof without
 unresolved metavariables or direct sorry terms. Lean checks the declarations.

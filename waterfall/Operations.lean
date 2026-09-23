@@ -2,6 +2,7 @@ module
 public import waterfall.Execution
 public import waterfall.InductionPlan
 public import waterfall.ConstructorCritics
+public import waterfall.FocusingCritics
 public import waterfall.ContinuationCritics
 public meta import Lean.Elab.Tactic.Induction
 public meta import Lean.Elab.Tactic.Grind.Main
@@ -50,7 +51,11 @@ leaves its changed obligations available to the continuation. -/
 private def simplification (rules : Array (TSyntax `term)) (strength : Nat) : TacticM (TSyntax `tactic) := do
   let simpRules ← rules.mapM fun t => `(Lean.Parser.Tactic.simpLemma| $t:term)
   let steps := quote (Simp.defaultMaxSteps * strength)
-  let discharge := quote (({} : Simp.Config).maxDischargeDepth * strength)
+  -- Discharging a conditional simp lemma recursively invokes the simplifier.
+  -- Let every depth remain reachable at higher strengths without multiplying
+  -- this branching limit at each effort increase. Rewrite steps still scale
+  -- linearly with strength.
+  let discharge := quote (({} : Simp.Config).maxDischargeDepth + Nat.log2 strength / 2)
   `(tactic| simp_all (config := {maxSteps := $steps, maxDischargeDepth := $discharge}) [$simpRules,*])
 
 /-- The leaves delegate inference to Lean. Progressing normalization and case
@@ -107,7 +112,19 @@ private def closeGoal (rules : Array (TSyntax `term)) (strength : Nat) :
           setGoals (← g.apply (← mkConstWithFreshMVarLevels ctor)) }
   return #[
     { tacticMove "assumption/rfl" (← `(tactic| first | assumption | rfl | contradiction)) with
-      closure := .exact },
+      -- Contradiction contains its own recursive inversion search. Start with
+      -- one visited case-analysis goal and scale that hidden search with the
+      -- same strength as every other leaf solver; fuel 16 remains reachable.
+      closure := .exact, run :=
+        evalTactic (← `(tactic| first | assumption | rfl)) <|>
+        liftMetaTactic (fun goal => do
+          -- Direct refutation is the goal here, rather than a speculative
+          -- attempt to prove an arbitrary conclusion from an empty context.
+          let refuting ← goal.withContext do
+            return (← whnf (← goal.getType)).isConstOf ``False
+          let baseFuel := if refuting then ({} : Contradiction.Config).searchFuel else 1
+          goal.contradiction { searchFuel := baseFuel * strength }
+          return []) },
     { tacticMove "omega" (← `(tactic| omega)) with closure := .arithmetic },
     { tacticMove "simp" (← `(tactic| ($simp:tactic; done))) with closure := .simplification },
     { grind false with closure := .saturation },
@@ -330,7 +347,8 @@ public def movesFor (g : MVarId) (rules : Array (TSyntax `term)) (strength remai
   | .close => closeGoal rules strength
   | .basic => g.withContext do
       let preparation ← prepareGoal g rules strength
-      return preparation.filter (·.preparation != .targetSplit) ++
+      return (← (Critics.indexedFocus.propose g).collect) ++
+        preparation.filter (·.preparation != .targetSplit) ++
         (← ((Critics.transparentRules rules).propose g).collect) ++
         (← ((Critics.recursiveEquality rules).propose g).collect) ++
         (← ((Critics.sharedResults rules (strength > 1)).propose g).collect) ++
