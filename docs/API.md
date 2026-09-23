@@ -325,3 +325,28 @@ operation group includes this critic before ordinary introductions. It fuses
 introductions and shrinking constructor-indexed inversions into one backtrackable
 move, keeping every resulting case as an obligation. It declines cycles rather
 than committing to an unrolling, and retains the ordinary case-analysis moves.
+
+
+### Experimental deferred solver budgets
+
+This branch keeps the experiment disabled by default. The current frontend integration wraps search mode; committed mode keeps its existing hooks. `Move.heartbeatDivisor`
+divides an operation's ordinary strength-scaled heartbeat slice; one preserves
+the existing allowance. Zero is treated as one. Work spent on rejected or
+resource-limited calls remains charged, and the engine retains rollback ownership.
+
+`waterfall.DeferredSolvers.hooks` composes with existing hooks rather than replacing
+the proof engine. The temporary options `waterfall.deferSolvers`,
+`waterfall.solverCost`, and `waterfall.cheapSolverDivisor` enable weighted solver
+admission, set the path cost for full solver operations, and bound their cheap
+copies. A divisor of zero disables the copies. Target `simp`, full-context
+`simp_all`, and both ordinary grind variants have independent bounded alternatives.
+Exact and arithmetic closure precede these calls. Bounded copies appear only
+when the full operation does not fit the current contour, avoiding two calls
+at that same node. Full normalization is classified as solver work too.
+
+Increasing search depth eventually admits every original full solver operation;
+strength and the enclosing global limits still control runtime. This is a
+reachability property, not a promise to preserve successes at a fixed effort or
+heartbeat budget. The measured settings regress existing case-study proofs and
+are not recommended as the default. The options are for further experiments.
+Plans must be replayed with the same source, hooks and option settings.

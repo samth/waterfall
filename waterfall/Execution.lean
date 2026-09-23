@@ -27,7 +27,7 @@ public def attempt (cfg : Config) (stats : IO.Ref Stats) (m : Move)
   stats.modify fun s => { s with attempts := s.attempts + 1 }
   let ctx ← readThe Core.Context
   let now ← IO.getNumHeartbeats
-  let allowance := cfg.attemptHeartbeats * s.strength
+  let allowance := cfg.attemptHeartbeats * s.strength / max 1 m.heartbeatDivisor
   let remaining := if ctx.maxHeartbeats == 0 then allowance
     else ctx.initHeartbeats + ctx.maxHeartbeats - now
   let cap := min remaining allowance

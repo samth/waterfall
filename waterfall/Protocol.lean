@@ -143,6 +143,10 @@ public structure ForwardInstantiation where
 /-- Deferred inference plus typed policy metadata. Only the engine owns rollback
 and acceptance of its complete continuation. Noninduction is the default. -/
 public structure Move where
+  /-- Divide this operation's strength-scaled heartbeat allowance. A value of
+  one retains the ordinary slice. Larger values create bounded speculative
+  alternatives without refunding spent work or changing rollback ownership. -/
+  heartbeatDivisor : Nat := 1
   cost : Nat := 1
   label : String
   run : TacticM Unit
