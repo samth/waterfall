@@ -74,6 +74,15 @@ for an existential may make its first premise true and its second false. The
 default policy can restore the entire earlier state and try another witness.
 Proving siblings independently and combining their assignments would be wrong.
 
+At the `grind` leaf, [Leaf.lean](../waterfall/Leaf.lean) compiles plain global
+theorem parameters using Lean's first successful pattern choice. It skips the
+later pattern suggestions that Lean computes for an interactive parameter, then
+passes the resulting parameters to Lean's protected `grind` context. Other
+parameters, requested suggestions, local declarations, and editor code actions
+use Lean's parameter elaborator. The adapter changes neither the scaled `grind`
+limits nor Waterfall's search order. Routine leaves keep `grind`'s verbose
+diagnostics off; Waterfall tracing or diagnostics turns them on.
+
 `run` first executes any bounded `PreludeTrial`s requested by the installed
 hooks, then calls `proveAtDepthAndStrength` along the configured fair trial schedule. A
 failed prelude can use at most one quarter of the remaining effort and cannot remove a

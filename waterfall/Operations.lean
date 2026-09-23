@@ -5,6 +5,7 @@ public import waterfall.ConstructorCritics
 public import waterfall.FocusingCritics
 public import waterfall.ContinuationCritics
 public meta import Lean.Elab.Tactic.Induction
+public import waterfall.Leaf
 public meta import Lean.Elab.Tactic.Grind.Main
 public meta import Lean.Meta.Tactic.Grind.Types
 public meta import Lean.Meta.Tactic.LibrarySearch
@@ -68,6 +69,7 @@ private def closeGoal (rules : Array (TSyntax `term)) (strength : Nat) :
   -- slice. Extra outer time cannot help a solver stopped by an internal cap.
   let c : Grind.Config := {}
   let grindConfig : Grind.Config := { c with
+    verbose := (← isTracingEnabledFor `waterfall.search) || (← isDiagnosticsEnabled),
     lax := true, splits := c.splits * strength, gen := c.gen * strength,
     instances := c.instances * strength, ematch := c.ematch * strength,
     ringSteps := c.ringSteps * strength, acSteps := c.acSteps * strength,
@@ -95,7 +97,7 @@ private def closeGoal (rules : Array (TSyntax `term)) (strength : Nat) :
       recordExtraModUse (isMeta := false) `Init.Grind.Tactics
       if Grind.grind.warning.get (← getOptions) then
         logWarning "The `grind` tactic is new and its behavior may change in the future. This project has used `set_option grind.warning true` to discourage its use."
-      Lean.Elab.Tactic.grind (← getMainGoal) grindConfig false rs none }
+      Leaf.grind (← getMainGoal) grindConfig rs }
   -- Closers are accepted only with zero remaining goals. Even then, sibling
   -- obligations can force rollback: a closer may have instantiated a shared hole.
   -- Constructor applications can close a leaf outright, even when their data
