@@ -1,5 +1,5 @@
 name = "waterfall"
-version = "0.1.0"
+version = "0.2.0"
 description = "Small, configurable proof search for inductive Lean goals"
 keywords = ["automation", "induction", "tactic", "software-verification"]
 license = "Apache-2.0"

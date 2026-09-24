@@ -158,18 +158,19 @@ Specifying `cpus` allows multiple paths to be explored concurrently. Each worker
 
 ## Benchmark results
 
-On the full 2,645-entry inductive-bench selection, `waterfall` proves **1,615 of
+In the latest published complete benchmark (2026-09-22), `waterfall` proves **1,615 of
 2,631 theorem goals**, up from **1,594**: 22 gains and 1 loss on the same
-inputs. The remaining 14 entries are executable definitions, excluded from the
-goal counts below.
+inputs. The 2,645-entry selection also includes 14 executable definitions,
+excluded from the goal counts below.
 
 <div class="table-scroll">
 
-| Suite | Goals | Previous main | Current main |
+| Suite | Goals | Earlier revision | Sept. 22 revision |
 | --- | ---: | ---: | ---: |
 | Software Foundations: LF | 949 | 799 | 800 |
 | Software Foundations: PLF | 744 | 314 | 314 |
 | Software Foundations: VFA | 509 | 338 | 341 |
+| **Software Foundations total** | **2,202** | **1,451** | **1,455** |
 | TIP/CLAM | 173 | 77 | 87 |
 | Leon | 87 | 30 | 31 |
 | MiniF2F induction | 13 | 11 | 11 |
@@ -178,9 +179,13 @@ goal counts below.
 
 </div>
 
-Measured on 2026-09-22 with Lean 4.30.0, default search, effort 1,000, and one
-Lean thread, comparing `dde8f2e` with `8d7d84b` through the unchanged benchmark
-infrastructure. VProver includes only the established IndBen-156 subset.
+The Software Foundations subtotal is 1,455/2,202 theorem goals (66.1%) at the
+September 22 revision. It measures individual goals, not complete developments.
+
+Measured with Lean 4.30.0, default search, effort 1,000, and one Lean thread,
+comparing `dde8f2e` with `8d7d84b` through the unchanged benchmark infrastructure.
+The 0.2.0 release is newer than the measured revision and has not been rerun on
+the complete selection. VProver includes only the established IndBen-156 subset.
 These are individual-goal results with the source theory available; earlier
 benchmark lemmas may be supplied as assumptions. The comparison measures proof
 coverage, with no speedup claim.
@@ -193,14 +198,14 @@ coverage, with no speedup claim.
 
 ## Lake package
 
-waterfall 0.1.0 is available from [samth/waterfall](https://github.com/samth/waterfall).
+waterfall 0.2.0 is available from [samth/waterfall](https://github.com/samth/waterfall).
 A Lean project's `lakefile.toml` can depend on the Git repository:
 
 ```toml
 [[require]]
 name = "waterfall"
 git = "https://github.com/samth/waterfall.git"
-rev = "main"
+rev = "v0.2.0"
 ```
 
 The package depends only on Lean, targets 4.33.1, and is also tested on 4.30.0. A dependent
