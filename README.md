@@ -106,6 +106,15 @@ end waterfallReadme
 The default `mode := .search` is the default backtracking mode. `mode := .committed` is a simpler forward search that never backtracks after it makes progress.
 
 `effort` configures how hard the search works: more effort permits more attempts, deeper plans and stronger operations. Lean's enclosing resource limits still apply. 
+
+For goals involving recursive definitions, default search reserves up to 256
+attempts (at most a quarter of `effort`) for a final coordination trial. Ordinary
+search runs first; the final trial orders functional induction, interface
+simplification, and cases at blocked computations together. Small budgets and
+goals without recursive theory keep the full ordinary allowance. Both phases
+share the same global effort and ambient heartbeat limits. The committed mode
+keeps its existing schedule.
+
 `waterfall?` provides a “Try this” editor hint that replaces the invocation
 with ordinary Lean proof commands. Use `(report := true)` for search statistics.
 Local hypotheses, registered `simp` and `grind` rules, and definitions from the

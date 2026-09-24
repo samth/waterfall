@@ -269,17 +269,20 @@ public def run (cfg : Config) (rules : Array (TSyntax `term) := #[])
           hooks.accepted selection snapshot
           stats.modify fun s => { s with choices := s.choices.push selection.label }
       return ok
+    let finalTrials ← hooks.postlude cfg original
+    let reserve := min (cfg.effort / 4) (finalTrials.foldl (fun n t => n + t.attempts) 0)
+    let ordinaryEffort := cfg.effort - reserve
     let mut success := false
     -- Prelude work is deliberately bounded twice: by its own request and by a
     -- quarter of the remaining effort. Each failed speculative trial therefore
     -- leaves most of its starting allowance for the rest of the schedule.
     for trial in ← hooks.prelude cfg original do
-      if success || (← stats.get).attempts >= cfg.effort then break
+      if success || (← stats.get).attempts >= ordinaryEffort then break
       unless trial.strength > 0 do throwError "waterfall prelude strength must be positive"
       let spent := (← stats.get).attempts
       let allowance := min trial.attempts ((cfg.effort - spent) / 4)
       if allowance == 0 then continue
-      let trialCfg := { cfg with effort := min cfg.effort (spent + allowance) }
+      let trialCfg := { cfg with effort := min ordinaryEffort (spent + allowance) }
       -- Speculation receives the same share of remaining heartbeats as of
       -- effort, with room for one ordinary action slice. Cap the entire trial,
       -- including proposal generation. Failed trial work remains charged globally.
@@ -296,13 +299,21 @@ public def run (cfg : Config) (rules : Array (TSyntax `term) := #[])
     -- A fair policy visits every finite (depth, positive strength) pair as the
     -- effort bound grows. Policies are callbacks, not separate prover runs.
     for round in [:cfg.effort + 1] do
-      if success || (← stats.get).attempts >= cfg.effort then break
+      if success || (← stats.get).attempts >= ordinaryEffort then break
       for (depth, strength) in hooks.trials round do
-        if (← stats.get).attempts >= cfg.effort then break
+        if (← stats.get).attempts >= ordinaryEffort then break
         unless strength > 0 do throwError "waterfall trial strength must be positive"
-        if ← proveAtDepthAndStrength cfg .fair depth strength then
+        if ← proveAtDepthAndStrength {cfg with effort := ordinaryEffort} .fair depth strength then
           success := true
           break
+    -- Final trials spend the reserved operations, never a renewed allowance.
+    for trial in finalTrials do
+      if success || (← stats.get).attempts >= cfg.effort then break
+      unless trial.strength > 0 do throwError "waterfall postlude strength must be positive"
+      let spent := (← stats.get).attempts
+      let trialCfg := {cfg with effort := min cfg.effort (spent + trial.attempts)}
+      if ← proveAtDepthAndStrength trialCfg .postlude trial.depth trial.strength none trial.tag then
+        success := true
     let s ← stats.get
     let spent := (← IO.getNumHeartbeats) - start
     if cfg.report then

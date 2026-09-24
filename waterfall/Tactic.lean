@@ -3,7 +3,7 @@ public import waterfall.Parallel
 public import waterfall.Committed
 public import waterfall.Critics
 public import waterfall.Scheduling
-public import waterfall.Continuations
+public import waterfall.Coordination
 public import waterfall.Suggestions
 
 meta section
@@ -28,7 +28,7 @@ public inductive Mode where
 /-- The standard callbacks for a mode, available for programmatic adaptation. -/
 public def Mode.hooks (mode : Mode) (rules : Array (TSyntax `term) := #[]) : Hooks :=
   match mode with
-  | .search => Continuations.hooks rules <| Critics.hooks
+  | .search => Coordination.hooks rules <| Continuations.hooks rules <| Critics.hooks
       (InductionPlan.hooks
         (Scheduling.preparations (RecursionScheduling.hooks (activate := fun goals => do
           return (← Scheduling.exposesMoves Critics.propose goals) ||
