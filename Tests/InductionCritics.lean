@@ -159,4 +159,56 @@ example (n : Nat) (h : n.succ > 0) : n.succ > 0 := by
   check_abstraction drop
   assumption
 
+-- Assigned induction motives can discard producer arguments. Dependency checks
+-- must inspect the instantiated target and invariant, not the raw application.
+example (n : Nat) : n = n := by
+  run_tac withMainContext do
+    let saved ← saveState
+    let some n := (← getLCtx).findFromUserName? `n | throwError "missing input"
+    let input := mkFVar n.fvarId
+    let result ← mkAppM ``Nat.succ #[input]
+    let motiveType ← Term.elabTerm (← `(Nat → Nat → Prop)) none
+    let motive ← mkFreshExprMVar motiveType
+    let value ← Term.elabTerm (← `(fun (_ result : Nat) => result > 0)) (some motiveType)
+    motive.mvarId!.assign value
+    let proposition := mkApp2 motive input result
+    unless proposition.hasMVar && proposition.containsFVar n.fvarId do
+      throwError "fixture lost its assigned motive"
+    withLocalDeclD `ih proposition fun ih => do
+      -- A genuine relation to the producer input must be cleared, not silently
+      -- generalized as though it constrained the selected result alone.
+      let relation ← mkEq result input
+      withLocalDeclD `producer_relation relation fun relationProof => do
+        let target ← mkFreshExprSyntheticOpaqueMVar proposition
+        let goal := target.mvarId!
+        let some plan ← Generalization.abstractIndependent goal #[result]
+          | throwError "assigned target motive concealed independent result"
+        unless plan.hypotheses == #[ih.fvarId!] &&
+            plan.clearBefore == #[relationProof.fvarId!] do
+          throwError "assigned hypothesis motive lost its invariant"
+        let before ← saveState
+        let commands ← Generalization.commands plan
+        let prepared ← Generalization.prepare goal plan
+        setGoals [prepared.goal]
+        let expected ← Canonical.snapshot (← getUnsolvedGoals)
+        prepared.goal.withContext do
+          if (← getLCtx).contains n.fvarId then
+            throwError "obsolete producer input survived abstraction"
+        evalTactic (← `(tactic| assumption))
+        checkComplete [goal]
+        before.restore true
+        setGoals [goal]
+        for command in commands do
+          let text := (← PrettyPrinter.ppTactic command).pretty
+          evalTactic (← ofExcept (Parser.runParserCategory (← getEnv) `tactic text))
+        unless (← Canonical.snapshot (← getUnsolvedGoals)) == expected do
+          throwError "dependency-aware plan changed during command replay"
+        evalTactic (← `(tactic| assumption))
+        checkComplete [goal]
+        let dependent ← mkFreshExprSyntheticOpaqueMVar relation
+        unless (← Generalization.abstractIndependent dependent.mvarId! #[result]).isNone do
+          throwError "independent abstraction discarded a target relation"
+    saved.restore true
+  rfl
+
 end InductionCriticTests
