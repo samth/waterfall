@@ -165,15 +165,12 @@ including 509 VFA goals across 15 chapters.
 
 | Volume | Goals | Baseline | Search | Committed |
 | --- | --- | --- | --- | --- |
-| LF | 937 | 659 | 788 | 739 |
-| PLF | 744 | 230 | 314 | 354 |
-| VFA | 509 | 315 | 341 | 354 |
-| Total | 2,190 | 1,204 | 1,443 | 1,447 |
+| LF | 937 | 659 | 788 | 742 |
+| PLF | 744 | 230 | 314 | 372 |
+| VFA | 509 | 315 | 341 | 293 |
+| Total | 2,190 | 1,204 | 1,443 | 1,407 |
 
 </div>
-
-The baseline and Committed values are the previously recorded measurements. Search was rerun
-with Waterfall 0.2.0 on the same goal IDs; its source snapshot is newer than those earlier runs.
 
 The self-contained [LF and VFA examples](examples.md) cover optimizer soundness, insertion-sort
 correctness and accumulator traversal. They prove their helper lemmas locally; insertion-sort

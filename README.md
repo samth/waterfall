@@ -36,13 +36,10 @@ The VFA portion has 509 goals across 15 chapters.
 
 | Volume | Goals | Baseline | Search | Committed |
 | --- | ---: | ---: | ---: | ---: |
-| LF | 937 | 659 | 788 | 739 |
-| PLF | 744 | 230 | 314 | 354 |
-| VFA | 509 | 315 | 341 | 354 |
-| Total | 2,190 | 1,204 | 1,443 | 1,447 |
-
-The baseline and Committed values are the previously recorded measurements. Search was rerun
-with Waterfall 0.2.0 on the same goal IDs; its source snapshot is newer than those earlier runs.
+| LF | 937 | 659 | 788 | 742 |
+| PLF | 744 | 230 | 314 | 372 |
+| VFA | 509 | 315 | 341 | 293 |
+| Total | 2,190 | 1,204 | 1,443 | 1,407 |
 
 For small examples you can read and run, see [Tutorial/Examples.lean](Tutorial/Examples.lean):
 
