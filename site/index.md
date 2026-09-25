@@ -156,36 +156,29 @@ Specifying `cpus` allows multiple paths to be explored concurrently. Each worker
 
 <section id="results">
 
-## Benchmark results
+## Software Foundations
 
-On the full 2,645-entry inductive-bench selection, `waterfall` proves **1,615 of
-2,631 theorem goals**, up from **1,594**: 22 gains and 1 loss on the same
-inputs. The remaining 14 entries are executable definitions, excluded from the
-goal counts below.
+The recorded development runs cover 2,190 theorem and example goals from Software Foundations,
+including 509 VFA goals across 15 chapters.
 
 <div class="table-scroll">
 
-| Suite | Goals | Previous main | Current main |
-| --- | ---: | ---: | ---: |
-| Software Foundations: LF | 949 | 799 | 800 |
-| Software Foundations: PLF | 744 | 314 | 314 |
-| Software Foundations: VFA | 509 | 338 | 341 |
-| TIP/CLAM | 173 | 77 | 87 |
-| Leon | 87 | 30 | 31 |
-| MiniF2F induction | 13 | 11 | 11 |
-| VProver (IndBen-156) | 156 | 25 | 31 |
-| Total | 2,631 | 1,594 | 1,615 |
+| Volume | Goals | Baseline | Search | Committed |
+| --- | --- | --- | --- | --- |
+| LF | 937 | 659 | 788 | 739 |
+| PLF | 744 | 230 | 314 | 354 |
+| VFA | 509 | 315 | 341 | 354 |
+| Total | 2,190 | 1,204 | 1,443 | 1,447 |
 
 </div>
 
-Measured on 2026-09-24 with Lean 4.30.0, default search, effort 1,000, and one
-Lean thread, comparing `dde8f2e` with `f3c5ca3` through the unchanged benchmark
-infrastructure. VProver includes only the established IndBen-156 subset.
-These are individual-goal results with the source theory available; earlier
-benchmark lemmas may be supplied as assumptions. The comparison measures proof
-coverage, with no speedup claim.
+The baseline and Committed values are the previously recorded measurements. Search was rerun
+with Waterfall 0.2.0 on the same goal IDs; its source snapshot is newer than those earlier runs.
 
-[Measurement details and per-suite results](https://github.com/samth/waterfall/blob/main/docs/benchmarks/2026-09-24.md).
+The self-contained [LF and VFA examples](examples.md) cover optimizer soundness, insertion-sort
+correctness and accumulator traversal. They prove their helper lemmas locally; insertion-sort
+permutation retains an explicit composition step that the tested automated proofs did not
+discharge.
 
 </section>
 
