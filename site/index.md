@@ -54,9 +54,6 @@ theorem fast_elements_helper (t : Tree V) (acc : List (Nat × V)) :
 
 ## Usage
 
-`waterfall` closes the complete displayed proof state. If search fails, it restores the input
-proof state, so it can also be tried as the last tactic in an existing branch.
-
 `waterfall` uses local hypotheses, Lean’s registered `simp` and `grind` rules, and definitions
 referenced in the goal or hypotheses that originate in the current module. Local hypotheses support both
 backward application and forward instantiation.
@@ -87,7 +84,7 @@ re-elaboration add overhead beyond discovery; both modes and parallel execution 
 
 ## Search and commitment
 
-The goal of `waterfall` is to combine Lean-style proofs with ACL2-style search. It automatically considers induction, case analysis, and simplification, and if one of those fails, it backtracks and tries another. When a local rule is blocked by one missing proposition, it can use that proposition as a focused case split.
+The goal of `waterfall` is to combine Lean-style proofs with ACL2-style search. It will automatically consider induction, case analysis, and simplification, and if one of those fails, it will backtrack and try another.
 
 The default policy performs depth-first search over complete proof continuations, with iterative
 deepening in structural cost and solver strength. A checkpoint includes all sibling obligations
@@ -136,11 +133,7 @@ Both `waterfall` and `waterfall?` accept individual options or a structure such 
 
 `attemptHeartbeats` is the base raw-heartbeat slice per operation, scaled by trial strength and
 capped by the enclosing remaining allowance. Lean’s `maxHeartbeats` uses thousands of raw
-heartbeats. These limits are independent of the attempt budget and of `maxRecDepth`. A proof
-that needs more total work also needs a larger enclosing `set_option maxHeartbeats ... in` limit.
-
-`report := true` prints the attempts, visited nodes, successful trial depth and strength, raw
-heartbeat use, and the retained operation labels.
+heartbeats. These limits are independent of the attempt budget and of `maxRecDepth`.
 
 <a id="parallel"></a>
 
@@ -158,24 +151,22 @@ Specifying `cpus` allows multiple paths to be explored concurrently. Each worker
 
 ## Software Foundations
 
-The recorded development runs cover 2,190 theorem and example goals from Software Foundations,
-including 509 VFA goals across 15 chapters.
+Across an agent-ported version of Software Foundations, the results for `waterfall` are:
 
 <div class="table-scroll">
 
 | Volume | Goals | Baseline | Search | Committed |
 | --- | --- | --- | --- | --- |
-| LF | 937 | 659 | 788 | 742 |
-| PLF | 744 | 230 | 314 | 372 |
-| VFA | 509 | 315 | 341 | 293 |
-| Total | 2,190 | 1,204 | 1,443 | 1,407 |
+| LF | 937 | 659 | 740 | 739 |
+| PLF | 744 | 230 | 325 | 354 |
+| VFA | 509 | 315 | 390 | 354 |
+| Total | 2,190 | 1,204 | 1,455 | 1,447 |
 
 </div>
 
-The self-contained [LF and VFA examples](examples.md) cover optimizer soundness, insertion-sort
-correctness and accumulator traversal. They prove their helper lemmas locally; insertion-sort
-permutation retains an explicit composition step that the tested automated proofs did not
-discharge.
+The baseline combines separate runs of `simp_all`, `grind`, and one structural induction with
+`simp_all`/`grind` leaves. Induction tries eligible variables with and without generalization.
+
 
 </section>
 
@@ -183,18 +174,18 @@ discharge.
 
 ## Lake package
 
-waterfall 0.2.0 is available from [samth/waterfall](https://github.com/samth/waterfall).
+waterfall 0.1.0 is available from [samth/waterfall](https://github.com/samth/waterfall).
 A Lean project's `lakefile.toml` can depend on the Git repository:
 
 ```toml
 [[require]]
 name = "waterfall"
 git = "https://github.com/samth/waterfall.git"
-rev = "v0.2.0"
+rev = "main"
 ```
 
-The package depends only on Lean, targets 4.33.1, and is also tested on 4.30.0. A dependent
-project must use a matching toolchain. Its tactics are exported by `import waterfall`.
+The package depends only on Lean, targets 4.33.1, and is also tested on 4.30.0. The consumer
+must use a matching toolchain. Its tactics are exported by `import waterfall`.
 Lake records the resolved Git commit in `lake-manifest.json`. 
 
 [Lean tutorial](../Tutorial/Guide.lean)
