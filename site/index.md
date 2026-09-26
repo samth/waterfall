@@ -157,10 +157,10 @@ Across an agent-ported version of Software Foundations, the results for `waterfa
 
 | Volume | Goals | Baseline | Search | Committed |
 | --- | --- | --- | --- | --- |
-| LF | 937 | 659 | 740 | 739 |
-| PLF | 744 | 230 | 325 | 354 |
-| VFA | 509 | 315 | 390 | 354 |
-| Total | 2,190 | 1,204 | 1,455 | 1,447 |
+| LF | 937 | 659 | 791 | 749 |
+| PLF | 744 | 230 | 347 | 385 |
+| VFA | 509 | 315 | 402 | 357 |
+| Total | 2,190 | 1,204 | 1,540 | 1,491 |
 
 </div>
 
@@ -174,14 +174,14 @@ The baseline combines separate runs of `simp_all`, `grind`, and one structural i
 
 ## Lake package
 
-waterfall 0.1.0 is available from [samth/waterfall](https://github.com/samth/waterfall).
+waterfall 0.2.0 is available from [samth/waterfall](https://github.com/samth/waterfall).
 A Lean project's `lakefile.toml` can depend on the Git repository:
 
 ```toml
 [[require]]
 name = "waterfall"
 git = "https://github.com/samth/waterfall.git"
-rev = "main"
+rev = "v0.2.0"
 ```
 
 The package depends only on Lean, targets 4.33.1, and is also tested on 4.30.0. The consumer

@@ -31,14 +31,14 @@ The current release is **waterfall 0.2.0**. You can find the website at
 
 ## Software Foundations
 
-The 0.1.0 benchmark covered 2,190 theorem and example goals from Software Foundations, including 509 VFA goals across 15 chapters.
+The Software Foundations evaluation covers 2,190 theorem and example goals, including 509 VFA goals across 15 chapters.
 
 | Volume | Goals | Baseline | Search | Committed |
 | --- | ---: | ---: | ---: | ---: |
-| LF | 937 | 659 | 740 | 739 |
-| PLF | 744 | 230 | 325 | 354 |
-| VFA | 509 | 315 | 390 | 354 |
-| Total | 2,190 | 1,204 | 1,455 | 1,447 |
+| LF | 937 | 659 | 791 | 749 |
+| PLF | 744 | 230 | 347 | 385 |
+| VFA | 509 | 315 | 402 | 357 |
+| Total | 2,190 | 1,204 | 1,540 | 1,491 |
 
 For small examples you can read and run, see [Tutorial/Examples.lean](Tutorial/Examples.lean):
 
