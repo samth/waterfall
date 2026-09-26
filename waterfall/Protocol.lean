@@ -247,7 +247,7 @@ public structure Job where
 /-- Policies may distinguish a bounded speculative contour from the ordinary
 fair schedule without recognizing a depth value or inspecting mutable counters. -/
 public inductive TrialOrigin where
-  | prelude | fair
+  | prelude | fair | postlude
   deriving BEq, Repr, Inhabited, ToJson, FromJson
 
 /-- A complete search checkpoint, including the retained plan and arbitrary,
@@ -308,8 +308,8 @@ public structure SearchPolicy where
 
 public def SearchPolicy.default : SearchPolicy := ⟨Unit, (), fun space => space.expand 0 #[] (fun _ => true)⟩
 
-/-- A bounded speculative trial before the ordinary fair schedule. The engine
-limits each prelude to one quarter of its starting remaining effort. Each trial
+/-- A bounded speculative trial specification, used by preludes and postludes.
+Before the ordinary fair schedule, the engine limits each prelude to one quarter of its starting remaining effort. Each trial
 also receives a proportional share of remaining heartbeats, with a floor of one
 ordinary action slice. Failed speculative work remains charged. -/
 public structure PreludeTrial where
@@ -336,6 +336,10 @@ public structure Hooks where
   /-- Goal-directed, bounded trials run before `trials`. They may improve
   finite-budget ordering but cannot remove any trial from the fair schedule. -/
   prelude : Config → List MVarId → TacticM (Array PreludeTrial) := fun _ _ => pure #[]
+  /-- Final speculative trials, after ordinary search fails. Their combined
+  reservation is capped at one quarter of total effort. All phases share the
+  same counters, ambient heartbeat allowance, rollback and proof validation. -/
+  postlude : Config → List MVarId → TacticM (Array PreludeTrial) := fun _ _ => pure #[]
   /-- Finite batches of trials. For eventual reachability, visit every finite
   depth and positive strength; effort truncates this one sequence globally. -/
   trials : Nat → Array (Nat × Nat) := diagonalTrials 1
