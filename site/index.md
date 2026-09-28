@@ -124,6 +124,7 @@ Both `waterfall` and `waterfall?` accept individual options or a structure such 
 | `attemptHeartbeats` | `20000000` | Base raw-heartbeat slice per operation, scaled by trial strength. |
 | `lazy` | `true` | Generate each candidate batch when reached. False enumerates all batches in a phase up front. |
 | `deferChecks` | `false` | True postpones applicability checks until a candidate is considered. |
+| `premises` | `0` | Up to this many earlier theorems of the current module, chosen by shared vocabulary, for the `simp` closer to retry with when its ordinary run fails. |
 | `report` | `false` | `true` prints search statistics. |
 
 </div>

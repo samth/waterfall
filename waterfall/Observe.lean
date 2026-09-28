@@ -202,7 +202,7 @@ public def replay (plan : Plan) (rules : Array (TSyntax `term)) (key : String)
         phase := .enumerate, depth := step.remaining,
         strength := step.strength, group := some step.action.group }
       let moves ← hooks.array span do
-        let original ← movesFor g localRules step.strength step.remaining step.action.group
+        let original ← movesFor g localRules step.strength step.remaining step.action.group hooks.leafLemmas
         return original ++ (← hooks.extraMoves g localRules step.strength step.remaining step.action.group)
       let some move := moves[step.action.index]? | throwError "waterfall plan action unavailable"
       unless move.replayable do throwError "waterfall plan replay unsupported for stateful extension"

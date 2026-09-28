@@ -50,7 +50,7 @@ public def hooks (rules : Array (TSyntax `term)) (base : Hooks := {}) : Hooks :=
       if group != .close || strength <= 1 then return original
       -- More structural alternatives need not force more eager saturation.
       -- Keep the cheap leaf configuration available inside the deeper contour.
-      return original ++ (← movesFor g rules 1 remaining .close).map
+      return original ++ (← movesFor g rules 1 remaining .close base.leafLemmas).map
         (fun m => {m with role := `continuationClose})
     prelude := fun cfg goals => do
       -- Preserve the ordinary default-budget search. Extra effort buys the

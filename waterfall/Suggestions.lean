@@ -73,7 +73,7 @@ private def command (step : Selection) (rules : Array (TSyntax `term)) (hooks : 
     TacticM (TSyntax `tactic) := withMainContext do
   let g ← getMainGoal
   let rules ← prepareRules g rules
-  let moves ← movesFor g rules step.strength step.remaining step.action.group
+  let moves ← movesFor g rules step.strength step.remaining step.action.group hooks.leafLemmas
   let moves := moves ++ (← hooks.extraMoves g rules step.strength step.remaining step.action.group)
   let some move := moves[step.action.index]? | throwError "unknown proof operation"
   if let some command := move.command? then

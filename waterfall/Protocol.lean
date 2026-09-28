@@ -350,6 +350,11 @@ public structure Hooks where
   rolled back: replay needs the same deterministic cost for the same input. -/
   cost : MVarId → Span → Candidate → TacticM Nat :=
     fun _ _ c => pure (c.move.cost * (if c.action.group == .library then 2 else 1))
+  /-- Candidate lemmas for the `simp` closer, most relevant first. At each node the
+  closer first runs its ordinary simplifier; only if that fails does it retry with
+  the candidates relevant to that node's goal. They add no moves and no attempts.
+  Replay and rendering regenerate closers from the same candidates. -/
+  leafLemmas : Array Name := #[]
   /-- Opt-in providers append alternatives; original generated selectors keep their indices. -/
   extraMoves : MVarId → Array (TSyntax `term) → Nat → Nat → Group → TacticM (Array Move) :=
     fun _ _ _ _ _ => pure #[]

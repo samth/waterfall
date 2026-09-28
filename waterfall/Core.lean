@@ -59,7 +59,7 @@ public def proposePrepared (cfg : Config) (stats : IO.Ref Stats) (hooks : Hooks)
       phase := .enumerate, group := some candidate.action.group,
       action := some candidate.action, label := "applicability" } candidate.move.applicable
   let generate (group : Group) := hooks.array { span with phase := .enumerate, group := some group } do
-    let original ← movesFor job.goal prepared.rules strength job.remaining group
+    let original ← movesFor job.goal prepared.rules strength job.remaining group hooks.leafLemmas
     let extra ← hooks.extraMoves job.goal prepared.rules strength job.remaining group
     let candidates := (original ++ extra).mapIdx fun i m => Candidate.mk (ActionId.mk group i) m
     -- Assign selectors before filtering, so eager and deferred checks agree.

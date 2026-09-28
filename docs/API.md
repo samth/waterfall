@@ -33,7 +33,8 @@ use `movesFor`, `operations`, and `Hooks`.
 
 ## Tactic interface
 
-`Options` extends engine `Config` with `mode : Mode := .search` and `cpus : Nat := 1`. Standard Lean configuration syntax accepts
+`Options` extends engine `Config` with `mode : Mode := .search`, `cpus : Nat := 1` and
+`premises : Nat := 0`. Standard Lean configuration syntax accepts
 individual fields or `(config := { ... })`. The adapter passes
 `mode.hooks` and `Options.toConfig` to `Parallel.run`; one CPU calls `run` directly. Custom callback functions are
 configured through `run`, preserving the arbitrary typed policy state interface.
@@ -58,6 +59,23 @@ accepted-step hook contract are unchanged. `Move.subject` identifies the
 expression acted upon; `Move.command?` optionally shares a command an adapter
 already constructs. These are presentation metadata, independent of dispatch,
 cost and policy selection. A command proposal is always checked as printed text.
+
+## Relevant earlier theorems
+
+`Premises.select goals limit` ranks theorems declared in the current module by the
+constants their statements share with the goals' targets and visible hypotheses,
+weighting each constant by its inverse document frequency among the candidates.
+Logical connectives and instances are ignored; generated equation, induction,
+constructor and matcher lemmas and theorems whose proofs use `sorry` are excluded.
+`Premises.relevantAt g names limit` keeps, in order, the names whose statements
+share vocabulary with one goal.
+
+With `premises := n`, the tactic selects up to `n` names at entry and stores them
+in `Hooks.leafLemmas`; `Mode.hooks` takes them as an optional argument. When the
+close group is generated at a node, the `simp` closer becomes
+`first | (simp_all [rules]; done) | (simp_all [rules, relevant]; done)`, where
+`relevant` are at most 16 selected theorems relevant to that node. No move or
+attempt is added. Replay and rendering regenerate the closer from the same names.
 
 ## Search and checkpoints
 
