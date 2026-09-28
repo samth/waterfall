@@ -151,7 +151,7 @@ accounting and adopts only a whole completed proof. These modules do not add
 inference rules.
 
 [Premises.lean](../waterfall/Premises.lean) selects earlier theorems of the
-current module by shared vocabulary. With the `premises` option, the `simp` closer
+current module and of imported modules with the same root name by shared vocabulary. With the `premises` option, the `simp` closer
 retries with those relevant to its node after its ordinary run fails.
 
 [Observe.lean](../waterfall/Observe.lean) adds optional timing, resource control,

@@ -49,8 +49,9 @@ public structure Options extends Config where
   /-- Maximum concurrent workers. One uses the original sequential traversal.
   Effort and ambient heartbeats remain aggregate limits across all workers. -/
   cpus : Nat := 1
-  /-- Consider up to this many of the most relevant earlier theorems of the current
-  module as `simp` lemmas. Relevance is the constants a theorem's statement shares
+  /-- Consider up to this many of the most relevant earlier theorems as `simp` lemmas,
+  from the current module and from imported modules whose names share its root.
+  Relevance is the constants a theorem's statement shares
   with the goals. At each node the `simp` closer tries them, restricted to those
   relevant to that node, only after its ordinary simplifier fails. Off by default:
   the extra simplifier calls cost heartbeats, and a closure they find changes the

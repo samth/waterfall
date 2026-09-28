@@ -62,11 +62,14 @@ cost and policy selection. A command proposal is always checked as printed text.
 
 ## Relevant earlier theorems
 
-`Premises.select goals limit` ranks theorems declared in the current module by the
+`Premises.select goals limit` ranks theorems declared earlier in the current module,
+private ones included, and the public theorems of imported modules whose names share
+the current module's root, by the
 constants their statements share with the goals' targets and visible hypotheses,
 weighting each constant by its inverse document frequency among the candidates.
 Logical connectives and instances are ignored; generated equation, induction,
 constructor and matcher lemmas and theorems whose proofs use `sorry` are excluded.
+The imported candidates are collected once per module.
 `Premises.relevantAt g names limit` keeps, in order, the names whose statements
 share vocabulary with one goal.
 

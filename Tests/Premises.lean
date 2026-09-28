@@ -2,8 +2,9 @@ import waterfall
 
 /-!
 Relevant earlier theorems. With `premises := n`, the `simp` closer retries with up
-to `n` earlier theorems of the current module that share vocabulary with the goal,
-restricted at each node to those relevant to it. The option is off by default.
+to `n` earlier theorems that share vocabulary with the goal, restricted at each node
+to those relevant to it. The option is off by default. Tests/PremisesImport.lean
+covers theorems from imported modules.
 -/
 
 namespace PremisesTest
@@ -56,6 +57,28 @@ example (n m p : N) : add (add n m) p = add (add n p) m := by
     let node ← waterfall.Premises.relevantAt goals.head! chosen 1
     unless node.size == 1 do throwError "per-node filtering ignored its limit"
   waterfall (premises := 64)
+
+-- Private theorems are candidates like any other earlier theorem.
+def dbl : N → N
+  | .z => .z
+  | .s n => .s (.s (dbl n))
+
+private theorem dbl_add (n : N) : dbl n = add n n := by
+  induction n <;> simp_all [dbl, add, add_s]
+
+example (n m : N) : add (dbl n) m = add (add n n) m := by
+  fail_if_success waterfall
+  waterfall (premises := 4)
+
+open Lean Elab Tactic in
+example (n : N) : dbl n = add n n := by
+  run_tac do
+    let chosen ← waterfall.Premises.select (← getUnsolvedGoals) 64
+    unless chosen.contains ``dbl_add do
+      throwError "the private theorem was not offered: {chosen}"
+    if chosen.any (·.toString.contains "match_") then
+      throwError "a generated matcher lemma was offered: {chosen}"
+  exact dbl_add n
 
 -- Goals sharing no vocabulary with earlier theorems search as before.
 example (P : Prop) (h : P) : P := by waterfall (premises := 64)
