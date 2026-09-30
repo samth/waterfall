@@ -76,6 +76,9 @@ example (n : N) : dbl n = add n n := by
     let chosen ← waterfall.Premises.select (← getUnsolvedGoals) 64
     unless chosen.contains ``dbl_add do
       throwError "the private theorem was not offered: {chosen}"
+    let env ← getEnv
+    if chosen.any (isAuxRecursor env) then
+      throwError "an auxiliary recursor was offered: {chosen}"
     if chosen.any (·.toString.contains "match_") then
       throwError "a generated matcher lemma was offered: {chosen}"
   exact dbl_add n
@@ -85,5 +88,46 @@ example (P : Prop) (h : P) : P := by waterfall (premises := 64)
 example (P : Prop) (h : P) : P ∨ False := by
   fail_if_success waterfall (effort := 0) (premises := 64)
   exact Or.inl h
+
+
+-- A caller may retain a larger theory than sixteen names. These equivalent
+-- equations model a crowded lemma pool; commutativity and associativity must
+-- remain usable at the end of it.
+private theorem padding1 (n : N) : add n .z = n := add_z n
+private theorem padding2 (n : N) : add n .z = n := add_z n
+private theorem padding3 (n : N) : add n .z = n := add_z n
+private theorem padding4 (n : N) : add n .z = n := add_z n
+private theorem padding5 (n : N) : add n .z = n := add_z n
+private theorem padding6 (n : N) : add n .z = n := add_z n
+private theorem padding7 (n : N) : add n .z = n := add_z n
+private theorem padding8 (n : N) : add n .z = n := add_z n
+private theorem padding9 (n : N) : add n .z = n := add_z n
+private theorem padding10 (n : N) : add n .z = n := add_z n
+private theorem padding11 (n : N) : add n .z = n := add_z n
+private theorem padding12 (n : N) : add n .z = n := add_z n
+private theorem padding13 (n : N) : add n .z = n := add_z n
+private theorem padding14 (n : N) : add n .z = n := add_z n
+private theorem padding15 (n : N) : add n .z = n := add_z n
+private theorem padding16 (n : N) : add n .z = n := add_z n
+
+open Lean Elab Tactic in
+example (n m p : N) : add (add n m) p = add (add n p) m := by
+  run_tac do
+    let names := #[``padding1, ``padding2, ``padding3, ``padding4, ``padding5, ``padding6, ``padding7, ``padding8, ``padding9, ``padding10, ``padding11, ``padding12, ``padding13, ``padding14, ``padding15, ``padding16,
+      ``add_comm, ``add_assoc]
+    discard <| waterfall.run {} #[] (waterfall.Mode.search.hooks #[] names)
+
+-- Generated recursion theorems for propositions must not occupy premise slots.
+inductive Reach : N → Prop where
+  | zero : Reach .z
+  | step {n} : Reach n → Reach (.s n)
+
+open Lean Elab Tactic in
+example : Reach .z := by
+  run_tac do
+    let chosen ← waterfall.Premises.select (← getUnsolvedGoals) 64
+    if chosen.contains ``Reach.brecOn then
+      throwError "the generated Prop recursor was offered: {chosen}"
+  exact Reach.zero
 
 end PremisesTest

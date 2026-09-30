@@ -16,7 +16,8 @@ Relevance is shared vocabulary: each candidate is scored by the constants its
 statement shares with the goals, weighting a constant by how rare it is among
 the candidates. The candidates are the theorems declared earlier in the current
 module, private ones included, and the public theorems of imported modules from
-the same project, that is, modules whose names share the current module's root.
+the current module's root or one of the explicitly supplied module prefixes.
+Module roots are a default search scope, not an identification of Lake packages.
 Theorems whose proofs use `sorry` are excluded.
 -/
 
@@ -30,13 +31,18 @@ and the theorems Lean derives for inductive types, their constructors and
 auxiliary recursors. A private theorem is judged by the name its user wrote. -/
 private def generated (env : Environment) (n : Name) : Bool :=
   let n' := privateToUserName n
-  n'.isInternalDetail || n.hasMacroScopes || n'.anyS (numbered · "match_") ||
+  isAuxRecursor env n || isNoConfusion env n ||
+    n'.isInternalDetail || n.hasMacroScopes || n'.anyS (numbered · "match_") ||
     match n' with
     | .str parent s =>
       numbered s "eq_" || numbered s "proof_" || numbered s "match_" || s.startsWith "_" ||
         s == "eq_def" || s == "eq_unfold" || s == "induct" || s == "induct_unfolding" ||
         s == "fun_cases" || s == "mutual_induct" || s == "inj" || s == "injEq" ||
-        s == "sizeOf_spec" || s.startsWith "congr_eq_" || isAuxRecursor env parent ||
+        s == "sizeOf_spec" || s.startsWith "congr_eq_" ||
+        -- Prop-valued `brecOn` theorems are not always tagged as auxiliary
+        -- recursors. Check the generated name and its inductive parent too.
+        (s == "brecOn" && (env.find? parent).any (fun info => match info with
+          | .inductInfo _ => true | _ => false)) || isAuxRecursor env parent ||
         isNoConfusion env parent ||
         (env.find? parent).any (·.isCtor)
     | _ => false
@@ -75,42 +81,37 @@ private def admitted (name : Name) (value : Expr) : BaseIO Bool := do
   admittedCache.modify (·.insert name result)
   return result
 
-/-- The public user theorems of imported modules from the same project as the
-current module, with their vocabulary. The imports never change while a file is
-elaborated, so this is computed once per module. -/
-private initialize importedCache : IO.Ref (Option (Name × Array (Name × Array Name))) ←
+/-- Public user theorems in the imported module scope, with their vocabulary.
+The imports do not change during elaboration; cache this per module and scope. -/
+-- Include the scope in the cache key: separate calls in one file can search
+-- different imported developments.
+private initialize importedCache : IO.Ref (Option ((Name × Array Name) × Array (Name × Array Name))) ←
   IO.mkRef none
 
-private def importedCandidates : MetaM (Array (Name × Array Name)) := do
+private def importedCandidates (modules : Array Name) : MetaM (Array (Name × Array Name)) := do
   let env ← getEnv
   let main := env.mainModule
   if let some (m, cached) := ← importedCache.get then
-    if m == main then return cached
+    if m == (main, modules) then return cached
   let root := main.getRoot
   let mut out := #[]
-  unless root.isAnonymous do
-    for modName in env.header.moduleNames, data in env.header.moduleData do
-      unless root.isPrefixOf modName do continue
-      for info in data.constants do
-        let .thmInfo val := info | continue
-        -- A private theorem of another module cannot be cited here.
-        if isPrivateName val.name || generated env val.name then continue
-        out := out.push (val.name, vocabulary env val.type)
-  importedCache.set (some (main, out))
+  for modName in env.header.moduleNames, data in env.header.moduleData do
+    unless (!root.isAnonymous && root.isPrefixOf modName) ||
+        modules.any (·.isPrefixOf modName) do continue
+    for info in data.constants do
+      let .thmInfo val := info | continue
+      -- A private theorem of another module cannot be cited here.
+      if isPrivateName val.name || generated env val.name then continue
+      out := out.push (val.name, vocabulary env val.type)
+  importedCache.set (some ((main, modules), out))
   return out
 
-/-- Earlier theorems of the current module and theorems of imported modules from
-the same project, most relevant first, at most `limit`. Only candidates sharing
-at least one constant with the goals are returned. Ties keep a deterministic name
-order. -/
-public def select (goals : List MVarId) (limit : Nat) : MetaM (Array Name) := do
-  if limit == 0 then return #[]
+/-- Rank a finite candidate pool against the current obligations. Collection
+and scoring stay separate so callers can control the module scope. -/
+private def rank (goals : List MVarId) (candidates : Array (Name × Array Name))
+    (limit : Nat) : MetaM (Array Name) := do
+  if limit == 0 || candidates.isEmpty then return #[]
   let env ← getEnv
-  let mut candidates := (← importedCandidates)
-  for (name, info) in env.constants.map₂.toList do
-    let .thmInfo val := info | continue
-    unless generated env name do candidates := candidates.push (name, vocabulary env val.type)
-  if candidates.isEmpty then return #[]
   -- Document frequency over the candidate statements.
   let mut df : Std.HashMap Name Nat := {}
   for (_, consts) in candidates do
@@ -131,8 +132,22 @@ public def select (goals : List MVarId) (limit : Nat) : MetaM (Array Name) := do
     unless ← admitted name val.value do chosen := chosen.push name
   return chosen
 
-/-- The candidates, in order, whose statements share vocabulary with the goal `g`,
-at most `limit`. Used at each search node to restrict the candidates chosen at entry. -/
+/-- Earlier theorems of the current module and theorems of imported modules from
+the same root or an explicit `modules` prefix, most relevant first, at most
+`limit`. Only candidates sharing at least one constant with the goals are
+returned. Ties keep a deterministic name order. -/
+public def select (goals : List MVarId) (limit : Nat)
+    (modules : Array Name := #[]) : MetaM (Array Name) := do
+  if limit == 0 then return #[]
+  let env ← getEnv
+  let mut candidates := (← importedCandidates modules)
+  for (name, info) in env.constants.map₂.toList do
+    let .thmInfo val := info | continue
+    unless generated env name do candidates := candidates.push (name, vocabulary env val.type)
+  rank goals candidates limit
+
+/-- Keep entry order while filtering names whose statements share vocabulary
+with the residual goal. The caller controls the number of offered premises. -/
 public def relevantAt (g : MVarId) (candidates : Array Name) (limit : Nat) : MetaM (Array Name) := do
   if candidates.isEmpty || limit == 0 then return #[]
   let env ← getEnv

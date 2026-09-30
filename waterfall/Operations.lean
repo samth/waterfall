@@ -60,9 +60,6 @@ private def simplification (rules : Array (TSyntax `term)) (strength : Nat) : Ta
   let discharge := quote (({} : Simp.Config).maxDischargeDepth + Nat.log2 strength / 2)
   `(tactic| simp_all (config := {maxSteps := $steps, maxDischargeDepth := $discharge}) [$simpRules,*])
 
--- Candidate lemmas used by one node's `simp` closer after the plain simplifier fails.
-private def nodeLemmaLimit : Nat := 16
-
 /-- The leaves delegate inference to Lean. Progressing normalization and case
 analysis are separate moves, so a destructive normalization can be undone.
 -/
@@ -81,7 +78,7 @@ private def closeGoal (rules : Array (TSyntax `term)) (leafLemmas : Array Name) 
   let simp ← simplification rules strength
   -- Earlier theorems relevant to this node extend the simplifier only as a
   -- fallback, so every closure the plain simplifier finds is unchanged.
-  let relevant ← (← getMainGoal).withContext <| Premises.relevantAt (← getMainGoal) leafLemmas nodeLemmaLimit
+  let relevant ← (← getMainGoal).withContext <| Premises.relevantAt (← getMainGoal) leafLemmas leafLemmas.size
   let simpCommand ← if relevant.isEmpty then `(tactic| ($simp:tactic; done)) else do
     let simpWith ← simplification (rules ++ Premises.rules relevant) strength
     `(tactic| first | ($simp:tactic; done) | ($simpWith:tactic; done))

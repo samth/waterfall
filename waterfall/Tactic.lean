@@ -57,6 +57,11 @@ public structure Options extends Config where
   the extra simplifier calls cost heartbeats, and a closure they find changes the
   order of the search, so a proof found without them can be lost. -/
   premises : Nat := 0
+  /-- Additional imported module prefixes to search for premises. Module roots
+  need not coincide with Lake packages: including the prefix `LF` lets a `TS` chapter retrieve
+  helpers from imported `LF` chapters. This does not import any modules or
+  enable premise selection when `premises` is zero. -/
+  premiseModules : Array Name := #[]
 
 declare_config_elab elabOptions Options
 
@@ -78,7 +83,7 @@ syntax (name := waterfallReportTac) "waterfall?" optConfig (" [" term,* "]")? : 
 
 /-- The most relevant earlier theorems for a call. -/
 private def leafPremises (options : Options) : TacticM (Array Name) := do
-  let names ← Premises.select (← getUnsolvedGoals) options.premises
+  let names ← Premises.select (← getUnsolvedGoals) options.premises options.premiseModules
   if options.report && !names.isEmpty then
     logInfo m!"PREMISES {names.size} candidate lemmas: {names.toList}"
   return names
