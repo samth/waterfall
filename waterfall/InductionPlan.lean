@@ -144,4 +144,34 @@ public def hooks (inner : Hooks := {}) : Hooks := { inner with
       else result := result.push candidate
     return some (result.map (·.action)) }
 
+/-- Prefer induction on evidence whose predicate occurs in the target. This is
+a stable partition of the inner policy's ordering, within the current batch;
+it retains every alternative and leaves each partition's order intact.
+
+This syntactic relevance test can miss predicates hidden behind definitions and
+can prefer incidental occurrences. It changes search priority, not eligibility:
+unrelated evidence and data induction remain available if the preferred route
+fails. -/
+public def evidenceFirst (inner : Hooks := {}) : Hooks := { inner with
+  order := fun g span candidates => do
+    let requested ← inner.order g span candidates
+    if !candidates.any (·.move.induction == .evidence) then
+      return requested
+    g.withContext do
+      let targetConstants := (← g.getType).getUsedConstants
+      let actions := requested.getD (candidates.map (·.action))
+      let mut preferred := #[]
+      let mut remaining := #[]
+      for action in actions do
+        let some candidate := candidates.find? (·.action == action)
+          | throwError "evidence ordering received an unknown ordered action"
+        let mut relevant := false
+        if candidate.move.induction == .evidence then
+          if let some major := candidate.move.major then
+            if let .const name _ := (← whnf (← inferType (mkFVar major))).getAppFn then
+              relevant := targetConstants.contains name
+        if relevant then preferred := preferred.push action
+        else remaining := remaining.push action
+      return some (preferred ++ remaining) }
+
 end waterfall.InductionPlan

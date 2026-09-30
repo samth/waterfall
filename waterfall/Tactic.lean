@@ -31,7 +31,7 @@ public inductive Mode where
 public def Mode.hooks (mode : Mode) (rules : Array (TSyntax `term) := #[])
     (leafLemmas : Array Name := #[]) : Hooks :=
   match mode with
-  | .search => Continuations.hooks rules <| Critics.hooks
+  | .search => InductionPlan.evidenceFirst <| Continuations.hooks rules <| Critics.hooks
       (InductionPlan.hooks
         (Scheduling.preparations (RecursionScheduling.hooks (inner := { leafLemmas })
           (activate := fun goals => do

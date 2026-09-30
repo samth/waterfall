@@ -78,4 +78,50 @@ example : True := by
       throwError "strict induction dominance was not selected"
   trivial
 
+-- Evidence relevance is a stable partition, including when another middleware
+-- has already changed the order. It retains unrelated evidence, data induction,
+-- candidates without a major premise, and multiple motives on the same premise.
+inductive Related : Nat → Prop where
+  | zero : Related 0
+  | step : Related n → Related (n + 1)
+
+inductive Unrelated : Nat → Prop where
+  | zero : Unrelated 0
+
+example (n : Nat) (h : Related n) (_other : Unrelated n)
+    (p : Nat → Prop) (_abstract : p n) : Related n := by
+  run_tac
+    let goal ← getMainGoal
+    let h ← getFVarId (mkIdent `h)
+    let other ← getFVarId (mkIdent `_other)
+    let abstract ← getFVarId (mkIdent `_abstract)
+    let mk (index : Nat) (kind : InductionKind) (major : Option FVarId) : Candidate :=
+      { action := { group := .induction, index }
+        move := {
+          label := s!"evidence fixture {index}"
+          induction := kind
+          major
+          run := pure () } }
+    let candidates := #[mk 0 .data (some h), mk 1 .evidence (some other),
+      mk 2 .evidence (some h), mk 3 .evidence none, mk 4 .evidence (some h),
+      mk 5 .evidence (some abstract)]
+    let span : Span := { phase := .enumerate, group := some .induction }
+    let check (hooks : Hooks) (expected : Array Nat) := do
+      let some actions ← hooks.order goal span candidates
+        | throwError "evidence ordering returned no permutation"
+      unless actions.map (·.index) == expected do
+        throwError "unexpected evidence order: {repr actions}"
+    check InductionPlan.evidenceFirst #[2, 4, 0, 1, 3, 5]
+    check (InductionPlan.evidenceFirst {
+      order := fun _ _ cs => pure (some (cs.reverse.map (·.action))) }) #[4, 2, 5, 3, 1, 0]
+    check Mode.search.hooks #[2, 4, 0, 1, 3, 5]
+    let dataOnly := #[mk 0 .data (some h)]
+    unless (← InductionPlan.evidenceFirst.order goal span dataOnly).isNone do
+      throwError "a batch without evidence should preserve the default order"
+  exact h
+
+-- The tactic still uses ordinary theorem hints with the new default ordering.
+example (n : Nat) (h : Related n) : Related (n + 1) := by
+  waterfall [Related.step]
+
 end waterfallInductionPlanTest
