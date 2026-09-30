@@ -121,6 +121,8 @@ Both `waterfall` and `waterfall?` accept individual options or a structure such 
 | `attemptHeartbeats` | `20000000` | Base raw-heartbeat slice per operation, scaled by trial strength. |
 | `lazy` | `true` | Generate each candidate batch when reached. False enumerates all batches in a phase up front. |
 | `deferChecks` | `false` | True postpones applicability checks until a candidate is considered. |
+| `premiseModules` | `#[]` | Additional imported module prefixes searched for premises, such as ``#[`LF]`` when a `TS` chapter uses helpers from `LF`. |
+| `premises` | `0` | Up to this many earlier theorems of the current module or of imported modules with the same root name, chosen by shared vocabulary and filtered at each subgoal. The `simp` closer retries with them when its ordinary run fails. |
 | `report` | `false` | `true` prints search statistics. |
 
 </div>

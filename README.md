@@ -97,7 +97,11 @@ current module are used automatically. When a local rule matches the target
 except for one missing proposition, waterfall can split on that blocked premise
 and continue each case. waterfall also retrieves library theorems
 for backward application. Imported definitions and additional rewrite or
-instantiation rules can be supplied in brackets.
+instantiation rules can be supplied in brackets. With `premises := n`, the
+`simp` closer can use an entry pool of up to `n` earlier theorems, filtered for
+each subgoal. The default scope is the current
+module and imported modules sharing its root; `premiseModules` includes additional
+imported module prefixes. Premise selection is off by default.
 
 | Option | Default | Meaning |
 | --- | --- | --- |
@@ -107,6 +111,8 @@ instantiation rules can be supplied in brackets.
 | `attemptHeartbeats` | `20000000` | Base raw heartbeat slice per operation; strength scales it |
 | `lazy` | `true` | Enumerate batches only when reached |
 | `deferChecks` | `false` | Delay candidate applicability probes |
+| `premises` | `0` | Relevant earlier theorems offered to the `simp` closer |
+| `premiseModules` | `#[]` | Additional imported module prefixes searched for premises |
 | `report` | `false` | Print search statistics |
 
 See the [compiled Lean tutorial](Tutorial/Guide.lean) and

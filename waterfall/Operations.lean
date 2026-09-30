@@ -6,6 +6,7 @@ public import waterfall.FocusingCritics
 public import waterfall.ContinuationCritics
 public meta import Lean.Elab.Tactic.Induction
 public import waterfall.Leaf
+public import waterfall.Premises
 public meta import Lean.Elab.Tactic.Grind.Main
 public meta import Lean.Meta.Tactic.Grind.Types
 public meta import Lean.Meta.Tactic.LibrarySearch
@@ -63,7 +64,7 @@ private def simplification (rules : Array (TSyntax `term)) (strength : Nat) : Ta
 analysis are separate moves, so a destructive normalization can be undone.
 -/
 
-private def closeGoal (rules : Array (TSyntax `term)) (strength : Nat) :
+private def closeGoal (rules : Array (TSyntax `term)) (leafLemmas : Array Name) (strength : Nat) :
     TacticM (Array Move) := do
   -- Scale the leaf solver's own limits as well as its surrounding heartbeat
   -- slice. Extra outer time cannot help a solver stopped by an internal cap.
@@ -75,6 +76,12 @@ private def closeGoal (rules : Array (TSyntax `term)) (strength : Nat) :
     ringSteps := c.ringSteps * strength, acSteps := c.acSteps * strength,
     canonHeartbeats := c.canonHeartbeats * strength }
   let simp ← simplification rules strength
+  -- Earlier theorems relevant to this node extend the simplifier only as a
+  -- fallback, so every closure the plain simplifier finds is unchanged.
+  let relevant ← (← getMainGoal).withContext <| Premises.relevantAt (← getMainGoal) leafLemmas leafLemmas.size
+  let simpCommand ← if relevant.isEmpty then `(tactic| ($simp:tactic; done)) else do
+    let simpWith ← simplification (rules ++ Premises.rules relevant) strength
+    `(tactic| first | ($simp:tactic; done) | ($simpWith:tactic; done))
   -- Recursive predicate constructors are also forward laws for the leaf solver.
   -- Keep this separate: recursive relation constructors can be expensive.
   -- After ordinary grind, try constructors of the recursive Prop at the target
@@ -128,7 +135,7 @@ private def closeGoal (rules : Array (TSyntax `term)) (strength : Nat) :
           goal.contradiction { searchFuel := baseFuel * strength }
           return []) },
     { tacticMove "omega" (← `(tactic| omega)) with closure := .arithmetic },
-    { tacticMove "simp" (← `(tactic| ($simp:tactic; done))) with closure := .simplification },
+    { tacticMove "simp" simpCommand with closure := .simplification },
     { grind false with closure := .saturation },
     { grind true with closure := .saturation }].map (fun m => { m with cost := 0 }) ++
       constructors.map (fun m => { m with closure := .constructor })
@@ -344,9 +351,9 @@ private def inductOrAnalyzeData (g : MVarId) : TacticM (Array Move) := do
 /-- Generating one group never requires enumerating a later group. Values captured
 by its moves belong to this input snapshot, exactly as for eager enumeration. -/
 public def movesFor (g : MVarId) (rules : Array (TSyntax `term)) (strength remaining : Nat)
-    (group : Group) : TacticM (Array Move) := do
+    (group : Group) (leafLemmas : Array Name := #[]) : TacticM (Array Move) := do
   let moves ← match group with
-  | .close => closeGoal rules strength
+  | .close => closeGoal rules leafLemmas strength
   | .basic => g.withContext do
       let preparation ← prepareGoal g rules strength
       return (← (Critics.indexedFocus.propose g).collect) ++

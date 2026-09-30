@@ -46,6 +46,14 @@ The enclosing Lean heartbeat and recursion limits also apply.
 `lazy := false` generates a whole phase's batches eagerly. `deferChecks := true`
 postpones applicability checks until a candidate is considered. Both settings
 keep candidates available, but change work ordering within a finite allowance.
+
+`premises := n` lets the `simp` closer retry, when its ordinary run fails, with up
+to `n` earlier theorems that share vocabulary with the goal. The candidates are the
+theorems of the current module, private ones included, and the public theorems of
+imported modules whose names share its root, such as an earlier chapter of the same
+development. It helps when a proof needs an earlier lemma, such as commutativity of
+a function defined in the same file. It is off by default because the extra simplifier calls
+cost time and can change which proof the search reaches first.
 -/
 example (P : Prop) (h : P) : P := by
   waterfall (effort := 1000) (lazy := true) (deferChecks := false)

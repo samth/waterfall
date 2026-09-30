@@ -150,6 +150,11 @@ depth/strength trials of either policy across isolated workers; it shares work
 accounting and adopts only a whole completed proof. These modules do not add
 inference rules.
 
+[Premises.lean](../waterfall/Premises.lean) selects earlier theorems of the
+current module and of imported modules in a configurable prefix scope by shared
+vocabulary. The entry pool is filtered against each residual goal. With the `premises` option, the `simp` closer
+retries with those relevant to its node after its ordinary run fails.
+
 [Observe.lean](../waterfall/Observe.lean) adds optional timing, resource control,
 recording, and exact-plan replay through middleware. [Tactic.lean](../waterfall/Tactic.lean)
 parses the public options. The proof engine owns rollback and acceptance; IO

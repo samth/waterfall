@@ -33,7 +33,9 @@ use `movesFor`, `operations`, and `Hooks`.
 
 ## Tactic interface
 
-`Options` extends engine `Config` with `mode : Mode := .search` and `cpus : Nat := 1`. Standard Lean configuration syntax accepts
+`Options` extends engine `Config` with `mode : Mode := .search`, `cpus : Nat := 1`,
+`premises : Nat := 0` and `premiseModules : Array Name := #[]`. Standard Lean
+configuration syntax accepts
 individual fields or `(config := { ... })`. The adapter passes
 `mode.hooks` and `Options.toConfig` to `Parallel.run`; one CPU calls `run` directly. Custom callback functions are
 configured through `run`, preserving the arbitrary typed policy state interface.
@@ -58,6 +60,32 @@ accepted-step hook contract are unchanged. `Move.subject` identifies the
 expression acted upon; `Move.command?` optionally shares a command an adapter
 already constructs. These are presentation metadata, independent of dispatch,
 cost and policy selection. A command proposal is always checked as printed text.
+
+## Relevant earlier theorems
+
+`Premises.select goals limit modules` ranks theorems declared earlier in the current module,
+private ones included, and the public theorems of imported modules whose names share
+the current module's root or an explicit module prefix in `modules`, by the
+constants their statements share with the goals' targets and visible hypotheses,
+weighting each constant by its inverse document frequency among the candidates.
+Logical connectives and instances are ignored; generated equation, induction,
+constructor and matcher lemmas and theorems whose proofs use `sorry` are excluded.
+The imported candidates are cached by current module and scope. Module roots
+are a default scope, not package boundaries. For a `TS` module importing helpers
+from `LF`, ``waterfall (premises := 16) (premiseModules := #[`LF])`` includes those
+helpers. Prefixes only admit modules already imported; they do not load modules.
+An empty array preserves the default scope. The optional `modules` argument to
+`Premises.select` defaults to `#[]`.
+`Premises.relevantAt g names limit` filters the retained names against one
+residual goal, preserving entry order. It cannot recover a name excluded
+from the entry pool.
+
+With `premises := n`, the tactic selects up to `n` names at entry and stores them
+in `Hooks.leafLemmas`; `Mode.hooks` takes them as an optional argument. When the
+close group is generated at a node, the `simp` closer becomes
+`first | (simp_all [rules]; done) | (simp_all [rules, relevant]; done)`, where
+`relevant` are the selected theorems relevant to that node. The requested entry-pool limit
+is also the maximum number offered to the closer; there is no separate hidden cap. No move or attempt is added. Replay and rendering regenerate the closer from the same names.
 
 ## Search and checkpoints
 
