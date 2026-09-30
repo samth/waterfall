@@ -212,3 +212,30 @@ example : True := by
   trivial
 
 end SinglePolicyFixture
+
+-- Exhausting a contour advances the schedule without refunding its work or
+-- leaking assignments. The final contour receives only the global remainder.
+elab "check_contour_allowance" : tactic => do
+  let outer ← Tactic.saveState
+  let root ← mkFreshExprSyntheticOpaqueMVar (mkConst ``False)
+  setGoals [root.mvarId!]
+  let current ← IO.mkRef 0
+  let counts ← IO.mkRef (#[] : Array Nat)
+  let hooks : Hooks := {
+    trials := fun _ => #[(0, 1)]
+    trialAllowance := fun _ _ _ => some 3
+    around := fun span _ body => do
+      if span.phase == .trial then
+        current.set 0
+        try return ← body
+        finally counts.modify (·.push (← current.get))
+      if span.phase == .action then current.modify (· + 1)
+      body }
+  let closed ← tryCatchRuntimeEx (do
+    discard <| run { effort := 8 } #[] hooks
+    pure true) fun _ => pure false
+  unless !closed && !(← root.mvarId!.isAssigned) && (← counts.get) == #[3, 3, 2] do
+    throwError "contour allowance leaked state, refunded work or failed to advance"
+  outer.restore true
+
+example : True := by check_contour_allowance; trivial

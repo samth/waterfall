@@ -300,7 +300,11 @@ public def run (cfg : Config) (rules : Array (TSyntax `term) := #[])
       for (depth, strength) in hooks.trials round do
         if (← stats.get).attempts >= cfg.effort then break
         unless strength > 0 do throwError "waterfall trial strength must be positive"
-        if ← proveAtDepthAndStrength cfg .fair depth strength then
+        let spent := (← stats.get).attempts
+        let trialCfg := match hooks.trialAllowance round depth strength with
+          | none => cfg
+          | some allowance => { cfg with effort := min cfg.effort (spent + allowance) }
+        if ← proveAtDepthAndStrength trialCfg .fair depth strength then
           success := true
           break
     let s ← stats.get

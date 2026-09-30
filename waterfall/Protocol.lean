@@ -339,6 +339,10 @@ public structure Hooks where
   /-- Finite batches of trials. For eventual reachability, visit every finite
   depth and positive strength; effort truncates this one sequence globally. -/
   trials : Nat → Array (Nat × Nat) := diagonalTrials 1
+  /-- Optional work limit for this contour, charged against the global effort.
+  A bounded schedule must revisit contours with unbounded allowances to retain
+  eventual reachability. `none` retains the original exhaustive contour. -/
+  trialAllowance : Nat → Nat → Nat → Option Nat := fun _ _ _ => none
   /-- Effective admission and path cost. The default charges library moves four
   and constructor closers one; the five ordinary closers remain free.
   Finite fixed costs retain eventual availability. Structural generators may
