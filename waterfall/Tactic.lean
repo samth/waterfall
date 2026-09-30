@@ -5,6 +5,7 @@ public import waterfall.Critics
 public import waterfall.Scheduling
 public import waterfall.Continuations
 public import waterfall.Suggestions
+public import waterfall.ExperimentalOrder
 public import waterfall.Premises
 
 meta section
@@ -91,7 +92,9 @@ private def leafPremises (options : Options) : TacticM (Array Name) := do
 private def execute (options : Options) (rules : Array (TSyntax `term)) : TacticM Unit := do
   let leafLemmas ← leafPremises options
   discard <| Parallel.run options.cpus options.toConfig rules
-    (fun use => use (options.mode.hooks rules leafLemmas))
+    (fun use => do
+      let hooks := options.mode.hooks rules leafLemmas
+      ExperimentalOrder.adapt hooks use)
 
 elab_rules : tactic
   | `(tactic| waterfall $cfg:optConfig $[[$rules,*]]?) => do
